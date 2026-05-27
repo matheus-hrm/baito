@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+.env
+.git
+.codex
+.agents
+npm-debug.log*
+*.db
+*.db-shm
+*.db-wal
