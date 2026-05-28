@@ -130,6 +130,7 @@ listingsRouter.patch('/:id', requireAuth, requireRole('provider'), validate(list
   const current = listingRow(req.params.id) as
     | {
         providerId: string;
+        status: string;
         title: string;
         description: string;
         categoryId: string | null;
@@ -139,6 +140,7 @@ listingsRouter.patch('/:id', requireAuth, requireRole('provider'), validate(list
       }
     | undefined;
   if (!provider || !current || current.providerId !== provider.id) throw new AppError('Anúncio não encontrado', 404);
+  if (current.status === 'deleted') throw new AppError('Anúncio não encontrado', 404);
 
   sqlite
     .prepare(
@@ -159,8 +161,9 @@ listingsRouter.patch('/:id', requireAuth, requireRole('provider'), validate(list
 
 listingsRouter.delete('/:id', requireAuth, requireRole('provider'), (req, res) => {
   const provider = providerForUser(getAuthUser(req).id);
-  const current = listingRow(req.params.id) as { providerId: string } | undefined;
+  const current = listingRow(req.params.id) as { providerId: string; status: string } | undefined;
   if (!provider || !current || current.providerId !== provider.id) throw new AppError('Anúncio não encontrado', 404);
+  if (current.status === 'deleted') throw new AppError('Anúncio não encontrado', 404);
   sqlite.prepare("UPDATE listings SET status = 'deleted' WHERE id = ?").run(req.params.id);
   res.json({ data: { ok: true } });
 });

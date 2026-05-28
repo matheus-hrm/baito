@@ -131,27 +131,24 @@ npm run dev
 
 ## Docker Compose
 
-Build:
+Para rodar o projeto completo, use o Compose da raiz do repositorio:
 
 ```bash
-docker compose build
+cd ..
+docker compose up --build
 ```
 
-Subir:
+Logs da API pelo Compose da raiz:
 
 ```bash
-docker compose up -d
-```
-
-Logs:
-
-```bash
+cd ..
 docker compose logs -f api
 ```
 
-Parar:
+Parar o projeto completo:
 
 ```bash
+cd ..
 docker compose down
 ```
 

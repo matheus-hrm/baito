@@ -1,15 +1,18 @@
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   ArrowRight,
   BriefcaseBusiness,
   Check,
+  Pencil,
   MapPin,
   Plus,
   Search,
   Shield,
+  Save,
   Star,
+  Trash2,
   UserRound,
   X,
 } from "lucide-react";
@@ -22,6 +25,7 @@ import {
   createContract,
   createListing,
   createProvider,
+  deleteListing,
   getListing,
   getMe,
   getProvider,
@@ -32,6 +36,8 @@ import {
   listProviders,
   loginUser,
   registerUser,
+  updateListing,
+  type ListingInput,
   type Listing,
 } from "./api";
 import "./marketplace.css";
@@ -45,11 +51,54 @@ function typeLabel(value: string) {
   return ({ fixed: "Fixo", hourly: "Por hora", daily: "Por dia", negotiable: "Negociável" } as Record<string, string>)[value] ?? value;
 }
 
+function useDebouncedValue<T>(value: T, delay = 350) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebounced(value), delay);
+    return () => window.clearTimeout(timeout);
+  }, [value, delay]);
+
+  return debounced;
+}
+
 function apiError(error: unknown) {
   if (error instanceof ApiError && typeof error.payload === "object" && error.payload && "error" in error.payload) {
     return String(error.payload.error);
   }
   return error instanceof Error ? error.message : "Não foi possível completar a operação.";
+}
+
+function tagsFromText(value: FormDataEntryValue | null) {
+  return String(value ?? "")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+}
+
+function listingInputFromForm(form: FormData, categoryId?: string): { input?: ListingInput; error?: string } {
+  const title = String(form.get("title") ?? "").trim();
+  const description = String(form.get("description") ?? "").trim();
+  const priceValue = Number(form.get("price")) || undefined;
+  const priceType = String(form.get("priceType") ?? "negotiable") as ListingInput["priceType"];
+  const tags = tagsFromText(form.get("tags"));
+
+  if (!title) return { error: "Informe um título para o anúncio." };
+  if (title.length < 5) return { error: "Use um título com pelo menos 5 caracteres." };
+  if (description.length < 20) return { error: "Descreva o serviço com pelo menos 20 caracteres." };
+  if (!["fixed", "hourly", "daily", "negotiable"].includes(priceType)) return { error: "Selecione um tipo de preço válido." };
+
+  return {
+    input: {
+      title,
+      description,
+      priceType,
+      tags,
+      ...(categoryId ? { categoryId } : {}),
+      ...(priceValue ? { price: priceValue } : { price: null }),
+    },
+  };
 }
 
 function isPasswordValidationError(error: unknown) {
@@ -73,7 +122,7 @@ function AppNav() {
           {token ? (
             <>
               <Link to={isProvider ? "/dashboard/prestador" : "/dashboard/cliente"}>Meu perfil</Link>
-              {isProvider ? <Link to="/dashboard/prestador">Minhas ofertas</Link> : <Link to="/prestadores">Buscar prestadores</Link>}
+              {isProvider ? <Link to="/dashboard/prestador/ofertas">Minhas ofertas</Link> : <Link to="/prestadores">Contratar serviço</Link>}
               {isProvider && <Link to="/prestadores">Buscar prestadores</Link>}
             </>
           ) : (
@@ -117,9 +166,10 @@ function ListingCard({ listing }: { listing: Listing }) {
 export function ProvidersPage() {
   const [category, setCategory] = useState("all");
   const [q, setQ] = useState("");
+  const debouncedQ = useDebouncedValue(q);
   const categories = useQuery({ queryKey: ["categories"], queryFn: listCategories });
-  const providers = useQuery({ queryKey: ["providers", category, q], queryFn: () => listProviders({ category, q, perPage: 24 }) });
-  const listings = useQuery({ queryKey: ["listings", category, q], queryFn: () => listListings({ category, q, perPage: 24 }) });
+  const providers = useQuery({ queryKey: ["providers", category, debouncedQ], queryFn: () => listProviders({ category, q: debouncedQ, perPage: 24 }) });
+  const listings = useQuery({ queryKey: ["listings", category, debouncedQ], queryFn: () => listListings({ category, q: debouncedQ, perPage: 24 }) });
 
   return (
     <>
@@ -239,7 +289,8 @@ export function ProviderDetailPage() {
     <>
       <AppNav />
       <main className="page"><div className="page-inner">
-        {!data && <div className="empty">Carregando prestador...</div>}
+        {query.isLoading && <div className="empty">Carregando prestador...</div>}
+        {query.isError && <div className="alert">{apiError(query.error)}</div>}
         {data && <>
           <header className="page-head"><div><div className="eyebrow">{data.provider.categoryName}</div><h1 className="page-title">{data.provider.displayName}</h1><p className="page-sub">{data.provider.description}</p></div></header>
           <section className="panel"><div className="panel-head"><h2>Anúncios</h2><span>{data.listings.length} publicados</span></div><div className="grid-cards">{data.listings.map((item) => <Link className="market-card" to="/anuncios/$listingId" params={{ listingId: item.id }} key={item.id}><h3>{item.title}</h3><p>{item.description}</p><div className="tags">{item.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div></Link>)}</div></section>
@@ -378,7 +429,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
   );
 }
 
-function AccessDenied({ title, description, to, action }: { title: string; description: string; to: "/dashboard/cliente" | "/dashboard/prestador"; action: string }) {
+function AccessDenied({ title, description, to, action }: { title: string; description: string; to: "/dashboard/cliente" | "/dashboard/prestador" | "/dashboard/prestador/ofertas"; action: string }) {
   return (
     <DashboardShell>
       <section className="panel">
@@ -408,15 +459,74 @@ export function ClientDashboard() {
     <DashboardShell>
       <header className="page-head"><div><div className="eyebrow">Cliente</div><h1 className="page-title">Olá, {me.data?.data.name ?? "cliente"}.</h1><p className="page-sub">Acompanhe propostas, contratos e mensagens em andamento.</p></div></header>
       <div className="metrics"><div className="metric"><span>Contratos</span><strong>{contracts.data?.meta.total ?? 0}</strong></div><div className="metric"><span>Conversas</span><strong>{conversations.data?.data.length ?? 0}</strong></div><div className="metric"><span>Perfil</span><strong>{me.data?.data.role ?? "-"}</strong></div></div>
-      <section className="panel"><div className="panel-head"><h2>Contratos</h2><Link className="btn-light" to="/prestadores"><Search size={16} />Buscar serviço</Link></div><div className="grid-cards">{contracts.data?.data.map((contract) => <article className="market-card" key={contract.id}><div className="price">{contract.status}</div><h3>{contract.title}</h3><p>{contract.providerName} · {price(contract.agreedPrice, contract.currency)}</p></article>)}</div></section>
+      <section className="panel"><div className="panel-head"><h2>Contratos</h2><Link className="btn-light" to="/prestadores"><Search size={16} />Contratar serviço</Link></div><div className="grid-cards">{contracts.data?.data.map((contract) => <article className="market-card" key={contract.id}><div className="price">{contract.status}</div><h3>{contract.title}</h3><p>{contract.providerName} · {price(contract.agreedPrice, contract.currency)}</p></article>)}</div></section>
     </DashboardShell>
   );
 }
 
 export function ProviderDashboard() {
   const token = getUserToken();
+  const me = useQuery({ queryKey: ["me", token], queryFn: () => getMe(token ?? ""), enabled: Boolean(token) });
+  const contracts = useQuery({ queryKey: ["contracts", token], queryFn: () => listContracts(token ?? ""), enabled: Boolean(token) });
+  const listings = useQuery({ queryKey: ["mine", token], queryFn: () => listMyListings(token ?? ""), enabled: Boolean(token) });
+  const conversations = useQuery({ queryKey: ["conversations", token], queryFn: () => listConversations(token ?? ""), enabled: Boolean(token) });
+  if (!token) return <AuthPage mode="login" />;
+  if (me.data?.data.role === "client") {
+    return <AccessDenied title="Dashboard exclusivo para prestadores." description="Sua conta é de cliente. Use a área de busca e acompanhamento das suas contratações." to="/dashboard/cliente" action="Ir para cliente" />;
+  }
+  return (
+    <DashboardShell>
+      <header className="page-head">
+        <div>
+          <div className="eyebrow">Prestador</div>
+          <h1 className="page-title">Olá, {me.data?.data.name ?? "prestador"}.</h1>
+          <p className="page-sub">Acompanhe sua operação, contratos recebidos e acesse a área separada de ofertas quando precisar publicar ou editar anúncios.</p>
+        </div>
+        <Link className="btn-dark" to="/dashboard/prestador/ofertas"><BriefcaseBusiness size={16} />Gerenciar ofertas</Link>
+      </header>
+      <div className="metrics">
+        <div className="metric"><span>Anúncios</span><strong>{listings.data?.data.length ?? 0}</strong></div>
+        <div className="metric"><span>Contratos</span><strong>{contracts.data?.meta.total ?? 0}</strong></div>
+        <div className="metric"><span>Conversas</span><strong>{conversations.data?.data.length ?? 0}</strong></div>
+      </div>
+      <section className="panel">
+        <div className="panel-head"><h2>Contratos recebidos</h2><Link className="btn-light" to="/dashboard/prestador/ofertas"><Plus size={16} />Nova oferta</Link></div>
+        <div className="grid-cards">
+          {contracts.data?.data.map((contract) => (
+            <article className="market-card" key={contract.id}>
+              <div className="price">{contract.status}</div>
+              <h3>{contract.title}</h3>
+              <p>{contract.clientName} · {price(contract.agreedPrice, contract.currency)}</p>
+            </article>
+          ))}
+          {contracts.data?.data.length === 0 && <div className="empty">Nenhum contrato recebido ainda.</div>}
+        </div>
+      </section>
+      <section className="panel">
+        <div className="panel-head"><h2>Atalhos</h2></div>
+        <div className="grid-cards">
+          <Link className="market-card" to="/dashboard/prestador/ofertas">
+            <div className="icon-box"><BriefcaseBusiness size={18} /></div>
+            <h3>Minhas ofertas</h3>
+            <p>Crie novos anúncios, edite informações, ajuste preço e remova serviços que não devem aparecer no marketplace.</p>
+          </Link>
+          <Link className="market-card" to="/prestadores">
+            <div className="icon-box"><Search size={18} /></div>
+            <h3>Ver marketplace</h3>
+            <p>Confira como os serviços e perfis aparecem para clientes navegando pelo Baito.</p>
+          </Link>
+        </div>
+      </section>
+    </DashboardShell>
+  );
+}
+
+export function ProviderListingsPage() {
+  const token = getUserToken();
   const queryClient = useQueryClient();
   const [listingFormError, setListingFormError] = useState<string | null>(null);
+  const [editingListingId, setEditingListingId] = useState<string | null>(null);
+  const [editingListingError, setEditingListingError] = useState<string | null>(null);
   const me = useQuery({ queryKey: ["me", token], queryFn: () => getMe(token ?? ""), enabled: Boolean(token) });
   const contracts = useQuery({ queryKey: ["contracts", token], queryFn: () => listContracts(token ?? ""), enabled: Boolean(token) });
   const listings = useQuery({ queryKey: ["mine", token], queryFn: () => listMyListings(token ?? ""), enabled: Boolean(token) });
@@ -434,16 +544,36 @@ export function ProviderDashboard() {
     onSuccess: () => queryClient.invalidateQueries(),
   });
   const listingMutation = useMutation({
-    mutationFn: (input: { title: string; description: string; price?: number }) => {
+    mutationFn: (input: ListingInput) => {
       const categoryId = categories.data?.data[0]?.id;
       return createListing(token ?? "", {
         ...input,
         ...(categoryId ? { categoryId } : {}),
-        priceType: "fixed",
-        tags: ["Atendimento", "Projeto", "Remoto"],
       });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["mine", token] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["mine", token] });
+      void queryClient.invalidateQueries({ queryKey: ["listings"] });
+    },
+  });
+  const updateListingMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: ListingInput }) => updateListing(token ?? "", id, input),
+    onSuccess: (_response, variables) => {
+      setEditingListingId(null);
+      setEditingListingError(null);
+      void queryClient.invalidateQueries({ queryKey: ["mine", token] });
+      void queryClient.invalidateQueries({ queryKey: ["listings"] });
+      void queryClient.invalidateQueries({ queryKey: ["listing", variables.id] });
+    },
+  });
+  const deleteListingMutation = useMutation({
+    mutationFn: (id: string) => deleteListing(token ?? "", id),
+    onSuccess: () => {
+      setEditingListingId(null);
+      setEditingListingError(null);
+      void queryClient.invalidateQueries({ queryKey: ["mine", token] });
+      void queryClient.invalidateQueries({ queryKey: ["listings"] });
+    },
   });
   if (!token) return <AuthPage mode="login" />;
   if (me.data?.data.role === "client") {
@@ -451,40 +581,113 @@ export function ProviderDashboard() {
   }
   return (
     <DashboardShell>
-      <header className="page-head"><div><div className="eyebrow">Prestador</div><h1 className="page-title">Gerencie sua operação.</h1><p className="page-sub">Crie perfil, publique anúncios e acompanhe contratos recebidos.</p></div></header>
+      <header className="page-head">
+        <div>
+          <div className="eyebrow">Ofertas</div>
+          <h1 className="page-title">Minhas ofertas.</h1>
+          <p className="page-sub">Publique serviços e mantenha seus anúncios atualizados em uma área separada da home do prestador.</p>
+        </div>
+        <Link className="btn-light" to="/dashboard/prestador">Voltar para home</Link>
+      </header>
       <div className="metrics"><div className="metric"><span>Anúncios</span><strong>{listings.data?.data.length ?? 0}</strong></div><div className="metric"><span>Contratos</span><strong>{contracts.data?.meta.total ?? 0}</strong></div><div className="metric"><span>Status</span><strong>Ativo</strong></div></div>
       <section className="panel"><div className="panel-head"><h2>Publicar serviço</h2><button className="btn-light" onClick={() => providerMutation.mutate()} type="button"><UserRound size={16} />Criar perfil padrão</button></div>
         <form className="form-grid" noValidate onSubmit={(event) => {
           event.preventDefault();
           setListingFormError(null);
           const form = new FormData(event.currentTarget);
-          const formPrice = Number(form.get("price")) || undefined;
-          const title = String(form.get("title") ?? "").trim();
-          const description = String(form.get("description") ?? "").trim();
-          if (!title) {
-            setListingFormError("Informe um título para o anúncio.");
+          const { input, error } = listingInputFromForm(form, categories.data?.data[0]?.id);
+          if (error || !input) {
+            setListingFormError(error ?? "Revise os dados do anúncio.");
             return;
           }
-          if (description.length < 20) {
-            setListingFormError("Descreva o serviço com pelo menos 20 caracteres.");
-            return;
-          }
-          listingMutation.mutate({
-            title,
-            description,
-            ...(formPrice ? { price: formPrice } : {}),
-          });
+          listingMutation.mutate(input);
         }}>
           <label>Título<input name="title" defaultValue="Consultoria especializada para pequenos negócios" /></label>
           <label>Descrição<textarea name="description" defaultValue="Diagnóstico inicial, plano de ação e execução acompanhada com entregas semanais." /></label>
+          <label>Tipo de preço
+            <select name="priceType" defaultValue="fixed">
+              <option value="fixed">Fixo</option>
+              <option value="hourly">Por hora</option>
+              <option value="daily">Por dia</option>
+              <option value="negotiable">Negociável</option>
+            </select>
+          </label>
           <label>Preço<input name="price" type="number" defaultValue="1200" /></label>
+          <label>Tags<input name="tags" defaultValue="Atendimento, Projeto, Remoto" /></label>
           {providerMutation.isError && <div className="alert">{apiError(providerMutation.error)}</div>}
           {listingFormError && <div className="field-popover">{listingFormError}</div>}
           {listingMutation.isError && <div className="alert">{apiError(listingMutation.error)}</div>}
           <button className="btn-dark" type="submit"><Plus size={16} />Criar anúncio</button>
         </form>
       </section>
-      <section className="panel"><div className="panel-head"><h2>Meus anúncios</h2></div><div className="grid-cards">{listings.data?.data.map((item) => <article className="market-card" key={item.id}><h3>{item.title}</h3><p>{item.description}</p><div className="tags">{item.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div></article>)}</div></section>
+      <section className="panel">
+        <div className="panel-head"><h2>Meus anúncios</h2></div>
+        <div className="grid-cards">
+          {listings.data?.data.map((item) => {
+            const isEditing = editingListingId === item.id;
+            return (
+              <article className="market-card" key={item.id}>
+                {isEditing ? (
+                  <form className="card-form" noValidate onSubmit={(event) => {
+                    event.preventDefault();
+                    setEditingListingError(null);
+                    const { input, error } = listingInputFromForm(new FormData(event.currentTarget));
+                    if (error || !input) {
+                      setEditingListingError(error ?? "Revise os dados do anúncio.");
+                      return;
+                    }
+                    updateListingMutation.mutate({ id: item.id, input });
+                  }}>
+                    <label>Título<input name="title" defaultValue={item.title} /></label>
+                    <label>Descrição<textarea name="description" defaultValue={item.description ?? ""} /></label>
+                    <label>Tipo de preço
+                      <select name="priceType" defaultValue={item.priceType ?? "negotiable"}>
+                        <option value="fixed">Fixo</option>
+                        <option value="hourly">Por hora</option>
+                        <option value="daily">Por dia</option>
+                        <option value="negotiable">Negociável</option>
+                      </select>
+                    </label>
+                    <label>Preço<input name="price" type="number" defaultValue={item.price ?? ""} /></label>
+                    <label>Tags<input name="tags" defaultValue={item.tags.join(", ")} /></label>
+                    {editingListingError && <div className="field-popover">{editingListingError}</div>}
+                    {updateListingMutation.isError && <div className="alert">{apiError(updateListingMutation.error)}</div>}
+                    <div className="card-actions">
+                      <button className="btn-dark" disabled={updateListingMutation.isPending} type="submit"><Save size={16} />Salvar</button>
+                      <button className="btn-light" type="button" onClick={() => { setEditingListingId(null); setEditingListingError(null); }}>Cancelar</button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <div className="card-topline">
+                      <div className="price">{price(item.price ?? null)} · {typeLabel(item.priceType ?? "negotiable")}</div>
+                      <div className="price">{item.status ?? "active"}</div>
+                    </div>
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                    <div className="tags">{item.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>
+                    {deleteListingMutation.isError && <div className="alert card-alert">{apiError(deleteListingMutation.error)}</div>}
+                    <div className="card-actions">
+                      <button className="btn-light" type="button" onClick={() => { setEditingListingId(item.id); setEditingListingError(null); }}><Pencil size={16} />Editar</button>
+                      <button
+                        className="btn-line danger"
+                        disabled={deleteListingMutation.isPending}
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Remover o anúncio "${item.title}"?`)) deleteListingMutation.mutate(item.id);
+                        }}
+                      >
+                        <Trash2 size={16} />Remover
+                      </button>
+                    </div>
+                  </>
+                )}
+              </article>
+            );
+          })}
+          {listings.data?.data.length === 0 && <div className="empty">Nenhum anúncio publicado ainda.</div>}
+        </div>
+      </section>
     </DashboardShell>
   );
 }

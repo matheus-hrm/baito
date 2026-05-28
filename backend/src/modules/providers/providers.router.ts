@@ -5,7 +5,7 @@ import { sqlite } from '../../db/connection.js';
 import { getAuthUser, requireAuth, requireRole } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { AppError } from '../../utils/errors.js';
-import { cleanLike, parsePagination } from '../../utils/pagination.js';
+import { cleanLike, jsonArray, parsePagination } from '../../utils/pagination.js';
 
 export const providersRouter = Router();
 
@@ -145,7 +145,7 @@ providersRouter.get('/:id', (req, res) => {
               tags, views, created_at AS createdAt
        FROM listings WHERE provider_id = ? AND status = 'active' ORDER BY created_at DESC`,
     )
-    .all(req.params.id);
+    .all(req.params.id) as Array<Record<string, unknown> & { tags: string | null }>;
   const reviews = sqlite
     .prepare(
       `SELECT r.id, r.rating, r.comment, r.created_at AS createdAt, u.name AS reviewerName
@@ -156,5 +156,5 @@ providersRouter.get('/:id', (req, res) => {
        ORDER BY r.created_at DESC`,
     )
     .all(req.params.id);
-  res.json({ data: { provider, listings, reviews } });
+  res.json({ data: { provider, listings: listings.map((row) => ({ ...row, tags: jsonArray(row.tags) })), reviews } });
 });

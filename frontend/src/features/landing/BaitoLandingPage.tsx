@@ -720,9 +720,9 @@ export default function BaitoApp() {
             </div>
             {userToken ? (
               <>
-                <Link to="/prestadores" className="nav-link">Buscar prestadores</Link>
+                <Link to="/prestadores" className="nav-link">{isProvider ? "Buscar prestadores" : "Contratar serviço"}</Link>
                 <Link to={isProvider ? "/dashboard/prestador" : "/dashboard/cliente"} className="nav-link">Meu perfil</Link>
-                {isProvider && <Link to="/dashboard/prestador" className="nav-link">Minhas ofertas</Link>}
+                {isProvider && <Link to="/dashboard/prestador/ofertas" className="nav-link">Minhas ofertas</Link>}
               </>
             ) : (
               <>

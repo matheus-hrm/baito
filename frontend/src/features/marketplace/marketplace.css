@@ -59,6 +59,16 @@ button, input, textarea, select { font: inherit; }
 .market-card:hover { transform: translateY(-2px); border-color: var(--g300); }
 .market-card h3 { margin: 12px 0 6px; font-size: 17px; letter-spacing: -0.02em; }
 .market-card p { margin: 0; color: var(--g500); font-size: 13.5px; line-height: 1.55; }
+.card-form { display: grid; gap: 11px; }
+.card-form label { display: grid; gap: 6px; color: var(--g600); font-size: 12.5px; font-weight: 750; }
+.card-form input, .card-form textarea, .card-form select {
+  border: 1px solid var(--g200); background: var(--white); border-radius: 8px; min-height: 40px; padding: 0 11px; outline: none; color: var(--fg);
+}
+.card-form textarea { min-height: 96px; padding-top: 9px; resize: vertical; }
+.card-form input:focus, .card-form textarea:focus, .card-form select:focus { border-color: var(--fg); }
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.card-alert { margin-top: 12px; }
+.danger { border-color: #f0c0c0; color: #8a1f1f; }
 .card-topline { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .icon-box { width: 42px; height: 42px; border: 1px solid var(--g100); border-radius: 9px; display: flex; align-items: center; justify-content: center; color: var(--g500); }
 .price { font-size: 12px; font-weight: 800; border: 1px solid var(--g100); background: var(--g50); border-radius: 6px; padding: 5px 9px; }

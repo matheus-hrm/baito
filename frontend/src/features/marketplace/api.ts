@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { authHeader, getJson, postJson } from "../../shared/api/http";
+import { authHeader, deleteJson, getJson, patchJson, postJson } from "../../shared/api/http";
 
 const metaSchema = z.object({ page: z.number(), perPage: z.number(), total: z.number() });
 
@@ -19,6 +19,17 @@ const authResponseSchema = z.object({
   }),
 });
 
+const tagsSchema = z.preprocess((value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}, z.array(z.string()));
+
 const listingSchema = z.object({
   id: z.string(),
   providerId: z.string(),
@@ -35,7 +46,7 @@ const listingSchema = z.object({
   price: z.number().nullable(),
   priceType: z.string(),
   priceCurrency: z.string(),
-  tags: z.array(z.string()),
+  tags: tagsSchema,
   status: z.string().optional(),
   views: z.number(),
   createdAt: z.string(),
@@ -72,6 +83,15 @@ export type AuthUser = z.infer<typeof userSchema>;
 export type Listing = z.infer<typeof listingSchema>;
 export type Provider = z.infer<typeof providerSchema>;
 export type Contract = z.infer<typeof contractSchema>;
+
+export type ListingInput = {
+  title: string;
+  description: string;
+  categoryId?: string | null;
+  price?: number | null;
+  priceType: "fixed" | "hourly" | "daily" | "negotiable";
+  tags: string[];
+};
 
 export function loginUser(input: { email: string; password: string }) {
   return postJson("/api/auth/login", input, authResponseSchema);
@@ -145,8 +165,16 @@ export function createProvider(token: string, input: { displayName: string; desc
   return postJson("/api/providers", input, z.object({ data: z.unknown() }), { headers: authHeader(token) });
 }
 
-export function createListing(token: string, input: { title: string; description: string; categoryId?: string; price?: number; priceType: "fixed" | "hourly" | "daily" | "negotiable"; tags: string[] }) {
+export function createListing(token: string, input: ListingInput) {
   return postJson("/api/listings", input, z.object({ data: listingSchema }), { headers: authHeader(token) });
+}
+
+export function updateListing(token: string, id: string, input: ListingInput) {
+  return patchJson(`/api/listings/${id}`, input, z.object({ data: listingSchema }), { headers: authHeader(token) });
+}
+
+export function deleteListing(token: string, id: string) {
+  return deleteJson(`/api/listings/${id}`, z.object({ data: z.object({ ok: z.boolean() }) }), { headers: authHeader(token) });
 }
 
 export function createContract(token: string, input: { providerId: string; listingId?: string; title: string; description?: string; agreedPrice?: number }) {

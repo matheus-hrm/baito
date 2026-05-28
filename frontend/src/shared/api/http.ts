@@ -45,6 +45,21 @@ export function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>, i
   });
 }
 
+export function patchJson<T>(path: string, body: unknown, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
+  return requestJson(path, schema, {
+    ...init,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteJson<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
+  return requestJson(path, schema, {
+    ...init,
+    method: "DELETE",
+  });
+}
+
 export function authHeader(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }

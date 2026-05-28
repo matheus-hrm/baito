@@ -9,6 +9,7 @@ import {
   NotFoundPage,
   ProviderDashboard,
   ProviderDetailPage,
+  ProviderListingsPage,
   ProvidersPage,
 } from "../features/marketplace/MarketplacePages";
 
@@ -70,6 +71,12 @@ const providerDashboardRoute = createRoute({
   component: ProviderDashboard,
 });
 
+const providerListingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard/prestador/ofertas",
+  component: ProviderListingsPage,
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "*",
@@ -87,6 +94,7 @@ export const router = createRouter({
     registerRoute,
     clientDashboardRoute,
     providerDashboardRoute,
+    providerListingsRoute,
     notFoundRoute,
   ]),
 });
