@@ -3,18 +3,26 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   ArrowRight,
+  BadgeCheck,
   BriefcaseBusiness,
   Check,
+  CheckCircle,
+  Clock,
+  Flag,
+  MessageCircle,
   Pencil,
   MapPin,
+  Play,
   Plus,
   Search,
+  Send,
   Shield,
   Save,
   Star,
   Trash2,
   UserRound,
   X,
+  XCircle,
 } from "lucide-react";
 
 import { listCategories } from "../categories/api";
@@ -22,23 +30,33 @@ import { ApiError } from "../../shared/api/http";
 import { getAdminToken } from "../../shared/session/admin-session";
 import { clearUserSession, getUserToken, setUserSession } from "../../shared/session/user-session";
 import {
+  acceptContract,
+  cancelContract,
+  completeContract,
+  confirmContract,
   createContract,
   createListing,
+  createPaymentIntent,
   createProvider,
   deleteListing,
+  getContract,
   getListing,
   getMe,
   getProvider,
   listContracts,
   listConversations,
   listListings,
+  listMessages,
   listMyListings,
   listProviders,
   loginUser,
+  markMessagesRead,
   registerUser,
+  sendMessage,
+  startContract,
   updateListing,
-  type ListingInput,
   type Listing,
+  type ListingInput,
 } from "./api";
 import "./marketplace.css";
 
@@ -145,6 +163,124 @@ function AppNav() {
   );
 }
 
+export function ChatWidget() {
+  const token = getUserToken();
+  const queryClient = useQueryClient();
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeConversation, setActiveConversation] = useState<string | null>(null);
+  const [messageContent, setMessageContent] = useState("");
+
+  const conversations = useQuery({
+    queryKey: ["conversations", token],
+    queryFn: () => listConversations(token ?? ""),
+    enabled: Boolean(token) && isOpen,
+    refetchInterval: isOpen ? 5000 : false,
+  });
+
+  const messages = useQuery({
+    queryKey: ["messages", activeConversation, token],
+    queryFn: () => listMessages(token ?? "", activeConversation ?? ""),
+    enabled: Boolean(token) && Boolean(activeConversation),
+    refetchInterval: activeConversation ? 3000 : false,
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: (content: string) => sendMessage(token ?? "", { receiverId: activeConversation ?? "", content }),
+    onSuccess: () => {
+      setMessageContent("");
+      void queryClient.invalidateQueries({ queryKey: ["messages", activeConversation] });
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (userId: string) => markMessagesRead(token ?? "", userId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+
+  const handleConversationClick = (userId: string) => {
+    setActiveConversation(userId);
+    void markReadMutation.mutate(userId);
+  };
+
+  const handleSendMessage = (e: FormEvent) => {
+    e.preventDefault();
+    if (!messageContent.trim()) return;
+    sendMutation.mutate(messageContent);
+  };
+
+  if (!token) return null;
+
+  const totalUnread = conversations.data?.data.reduce((sum, conv) => sum + conv.unread, 0) ?? 0;
+  const activeConvData = conversations.data?.data.find((c) => c.userId === activeConversation);
+
+  return (
+    <>
+      <button className="chat-button" onClick={() => setIsOpen(!isOpen)} type="button">
+        <MessageCircle size={24} />
+        {totalUnread > 0 && <span className="chat-badge">{totalUnread}</span>}
+      </button>
+
+      {isOpen && (
+        <div className="chat-window">
+          <div className="chat-header">
+            <h3>{activeConversation ? activeConvData?.userName ?? "Conversa" : "Mensagens"}</h3>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {activeConversation && (
+                <button className="chat-header-btn" onClick={() => setActiveConversation(null)} type="button">
+                  ←
+                </button>
+              )}
+              <button className="chat-header-btn" onClick={() => setIsOpen(false)} type="button">
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {!activeConversation ? (
+            <div className="chat-content">
+              {conversations.isLoading && <div className="empty">Carregando conversas...</div>}
+              {conversations.data?.data.length === 0 && <div className="empty">Nenhuma conversa ainda.</div>}
+              {conversations.data?.data.map((conv) => (
+                <button className="chat-conversation-item" onClick={() => handleConversationClick(conv.userId)} type="button" key={conv.userId}>
+                  <div className="chat-conv-header">
+                    <strong>{conv.userName}</strong>
+                    {conv.unread > 0 && <span className="chat-unread-badge">{conv.unread}</span>}
+                  </div>
+                  <p>{new Date(conv.lastMessageAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="chat-messages">
+                {messages.isLoading && <div className="empty">Carregando mensagens...</div>}
+                {messages.data?.data.map((msg) => {
+                  const isMine = msg.senderId !== activeConversation;
+                  return (
+                    <div className={`chat-message ${isMine ? "mine" : "theirs"}`} key={msg.id}>
+                      <div className="chat-message-content">{msg.content}</div>
+                      <div className="chat-message-time">{new Date(msg.createdAt).toLocaleTimeString("pt-BR", { timeStyle: "short" })}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <form className="chat-input-form" onSubmit={handleSendMessage}>
+                <input className="chat-input" value={messageContent} onChange={(e) => setMessageContent(e.target.value)} placeholder="Digite sua mensagem..." />
+                <button className="chat-send-btn" type="submit" disabled={!messageContent.trim() || sendMutation.isPending}>
+                  <Send size={18} />
+                </button>
+              </form>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 function ListingCard({ listing }: { listing: Listing }) {
   return (
     <Link className="market-card" to="/anuncios/$listingId" params={{ listingId: listing.id }}>
@@ -221,9 +357,22 @@ export function ProvidersPage() {
 export function ListingDetailPage() {
   const { listingId } = useParams({ from: "/anuncios/$listingId" });
   const token = getUserToken();
+  const queryClient = useQueryClient();
   const [proposalError, setProposalError] = useState<string | null>(null);
+  const [showMessageForm, setShowMessageForm] = useState(false);
+  const [messageContent, setMessageContent] = useState("");
+
   const listing = useQuery({ queryKey: ["listing", listingId], queryFn: () => getListing(listingId) });
   const create = useMutation({ mutationFn: (input: { title: string; description: string; agreedPrice?: number }) => createContract(token ?? "", { ...input, providerId: listing.data?.data.providerId ?? "", listingId }) });
+  const messageMutation = useMutation({
+    mutationFn: (content: string) => sendMessage(token ?? "", { receiverId: listing.data?.data.providerUserId ?? "", content }),
+    onSuccess: () => {
+      setMessageContent("");
+      setShowMessageForm(false);
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+
   const data = listing.data?.data;
 
   return (
@@ -273,6 +422,34 @@ export function ListingDetailPage() {
                 {create.isError && <div className="alert">{apiError(create.error)}</div>}
                 <button className="btn-dark" disabled={!token || create.isPending} type="submit"><Shield size={16} />Enviar proposta</button>
               </form>
+
+              {token && !showMessageForm && (
+                <div style={{ marginTop: "16px" }}>
+                  <button className="btn-light" onClick={() => setShowMessageForm(true)} type="button">
+                    <MessageCircle size={16} />Enviar mensagem ao prestador
+                  </button>
+                </div>
+              )}
+
+              {showMessageForm && (
+                <form className="form-grid" style={{ marginTop: "16px" }} onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!messageContent.trim()) return;
+                  messageMutation.mutate(messageContent);
+                }}>
+                  <label>Mensagem<textarea value={messageContent} onChange={(e) => setMessageContent(e.target.value)} placeholder="Digite sua mensagem..." /></label>
+                  {messageMutation.isSuccess && <div className="ok">Mensagem enviada. Acesse o chat para continuar a conversa.</div>}
+                  {messageMutation.isError && <div className="alert">{apiError(messageMutation.error)}</div>}
+                  <div className="card-actions">
+                    <button className="btn-dark" type="submit" disabled={!messageContent.trim() || messageMutation.isPending}>
+                      <Send size={16} />Enviar mensagem
+                    </button>
+                    <button className="btn-light" type="button" onClick={() => { setShowMessageForm(false); setMessageContent(""); }}>
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
         </div>
@@ -283,8 +460,23 @@ export function ListingDetailPage() {
 
 export function ProviderDetailPage() {
   const { providerId } = useParams({ from: "/prestadores/$providerId" });
+  const token = getUserToken();
+  const queryClient = useQueryClient();
+  const [showMessageForm, setShowMessageForm] = useState(false);
+  const [messageContent, setMessageContent] = useState("");
+
   const query = useQuery({ queryKey: ["provider", providerId], queryFn: () => getProvider(providerId) });
+  const messageMutation = useMutation({
+    mutationFn: (content: string) => sendMessage(token ?? "", { receiverId: query.data?.data.provider.userId ?? "", content }),
+    onSuccess: () => {
+      setMessageContent("");
+      setShowMessageForm(false);
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+
   const data = query.data?.data;
+
   return (
     <>
       <AppNav />
@@ -292,11 +484,319 @@ export function ProviderDetailPage() {
         {query.isLoading && <div className="empty">Carregando prestador...</div>}
         {query.isError && <div className="alert">{apiError(query.error)}</div>}
         {data && <>
-          <header className="page-head"><div><div className="eyebrow">{data.provider.categoryName}</div><h1 className="page-title">{data.provider.displayName}</h1><p className="page-sub">{data.provider.description}</p></div></header>
+          <header className="page-head">
+            <div>
+              <div className="eyebrow">{data.provider.categoryName}</div>
+              <h1 className="page-title">{data.provider.displayName}</h1>
+              <p className="page-sub">{data.provider.description}</p>
+            </div>
+            {token && (
+              <button className="btn-dark" onClick={() => setShowMessageForm(!showMessageForm)} type="button">
+                <MessageCircle size={16} />Enviar mensagem
+              </button>
+            )}
+          </header>
+
+          {showMessageForm && (
+            <section className="panel">
+              <form className="form-grid" onSubmit={(e) => {
+                e.preventDefault();
+                if (!messageContent.trim()) return;
+                messageMutation.mutate(messageContent);
+              }}>
+                <label>Mensagem<textarea value={messageContent} onChange={(e) => setMessageContent(e.target.value)} placeholder="Digite sua mensagem..." /></label>
+                {messageMutation.isSuccess && <div className="ok">Mensagem enviada. Acesse o chat para continuar a conversa.</div>}
+                {messageMutation.isError && <div className="alert">{apiError(messageMutation.error)}</div>}
+                <div className="card-actions">
+                  <button className="btn-dark" type="submit" disabled={!messageContent.trim() || messageMutation.isPending}>
+                    <Send size={16} />Enviar mensagem
+                  </button>
+                  <button className="btn-light" type="button" onClick={() => { setShowMessageForm(false); setMessageContent(""); }}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </section>
+          )}
+
           <section className="panel"><div className="panel-head"><h2>Anúncios</h2><span>{data.listings.length} publicados</span></div><div className="grid-cards">{data.listings.map((item) => <Link className="market-card" to="/anuncios/$listingId" params={{ listingId: item.id }} key={item.id}><h3>{item.title}</h3><p>{item.description}</p><div className="tags">{item.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div></Link>)}</div></section>
           <section className="panel"><div className="panel-head"><h2>Avaliações</h2><span>{data.reviews.length} públicas</span></div><div className="grid-cards">{data.reviews.map((review) => <article className="market-card" key={review.id}><div className="price">{review.rating} estrelas</div><h3>{review.reviewerName}</h3><p>{review.comment}</p></article>)}</div></section>
         </>}
       </div></main>
+    </>
+  );
+}
+
+export function ContractDetailPage() {
+  const { contractId } = useParams({ from: "/contratos/$contractId" });
+  const token = getUserToken();
+  const queryClient = useQueryClient();
+  const [cancelReason, setCancelReason] = useState("");
+  const [showCancelForm, setShowCancelForm] = useState(false);
+  const [showMessageForm, setShowMessageForm] = useState(false);
+  const [messageContent, setMessageContent] = useState("");
+
+  const me = useQuery({ queryKey: ["me", token], queryFn: () => getMe(token ?? ""), enabled: Boolean(token) });
+  const contract = useQuery({ queryKey: ["contract", contractId], queryFn: () => getContract(token ?? "", contractId), enabled: Boolean(token) });
+
+  const messageMutation = useMutation({
+    mutationFn: (content: string) => {
+      const otherPartyId = contract.data?.data ? (me.data?.data.id === contract.data.data.providerUserId ? contract.data.data.clientId : contract.data.data.providerUserId) : "";
+      return sendMessage(token ?? "", { receiverId: otherPartyId, content, contractId });
+    },
+    onSuccess: () => {
+      setMessageContent("");
+      setShowMessageForm(false);
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      void queryClient.invalidateQueries({ queryKey: ["messages"] });
+    },
+  });
+
+  const paymentMutation = useMutation({
+    mutationFn: () => createPaymentIntent(token ?? "", contractId),
+    onSuccess: (response) => {
+      // In a real implementation, redirect to Stripe checkout or show payment form
+      // For now, just show success message with client secret
+      console.log("Payment intent created:", response.data.clientSecret);
+      alert("Pagamento iniciado! Em produção, você seria redirecionado para o checkout do Stripe.\n\nClient Secret (teste): " + response.data.clientSecret.substring(0, 20) + "...");
+    },
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: () => acceptContract(token ?? "", contractId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
+      void queryClient.invalidateQueries({ queryKey: ["contracts"] });
+    },
+  });
+
+  const startMutation = useMutation({
+    mutationFn: () => startContract(token ?? "", contractId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
+      void queryClient.invalidateQueries({ queryKey: ["contracts"] });
+    },
+  });
+
+  const completeMutation = useMutation({
+    mutationFn: () => completeContract(token ?? "", contractId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
+      void queryClient.invalidateQueries({ queryKey: ["contracts"] });
+    },
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: () => confirmContract(token ?? "", contractId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
+      void queryClient.invalidateQueries({ queryKey: ["contracts"] });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (reason: string) => cancelContract(token ?? "", contractId, reason),
+    onSuccess: () => {
+      setShowCancelForm(false);
+      setCancelReason("");
+      void queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
+      void queryClient.invalidateQueries({ queryKey: ["contracts"] });
+    },
+  });
+
+  if (!token) return <AuthPage mode="login" />;
+  if (me.isLoading || contract.isLoading) {
+    return (
+      <>
+        <AppNav />
+        <main className="page">
+          <div className="page-inner">
+            <div className="empty">Carregando...</div>
+          </div>
+        </main>
+      </>
+    );
+  }
+  if (me.isError || contract.isError) return <AuthPage mode="login" />;
+  if (!me.data || !contract.data) return <AuthPage mode="login" />;
+
+  const data = contract.data.data;
+  const isProvider = me.data.data.id === data.providerUserId;
+  const isClient = me.data.data.id === data.clientId;
+  const status = data.status;
+
+  const canAccept = isProvider && status === "pending";
+  const canStart = isProvider && status === "accepted";
+  const canComplete = isProvider && status === "in_progress";
+  const canConfirm = isClient && status === "completed";
+  const canCancel = (isClient || isProvider) && ["pending", "accepted", "in_progress"].includes(status);
+
+  const statusSteps = [
+    { key: "pending", label: "Pendente", icon: Clock, active: status === "pending" },
+    { key: "accepted", label: "Aceito", icon: CheckCircle, active: status === "accepted" },
+    { key: "in_progress", label: "Em andamento", icon: Play, active: status === "in_progress" },
+    { key: "completed", label: "Concluído", icon: Flag, active: status === "completed" },
+    { key: "confirmed", label: "Confirmado", icon: BadgeCheck, active: status === "confirmed" },
+  ];
+
+  const currentStepIndex = statusSteps.findIndex((s) => s.key === status);
+
+  return (
+    <>
+      <AppNav />
+      <main className="page">
+        <div className="page-inner">
+              <header className="page-head">
+                <div>
+                  <div className="eyebrow">Contrato</div>
+                  <h1 className="page-title">{data.title}</h1>
+                  {data.description && <p className="page-sub">{data.description}</p>}
+                </div>
+                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                  <div className="price">{data.status}</div>
+                  <button className="btn-dark" onClick={() => setShowMessageForm(!showMessageForm)} type="button">
+                    <MessageCircle size={16} />Mensagem
+                  </button>
+                </div>
+              </header>
+
+              <div className="metrics">
+                <div className="metric">
+                  <span>{isProvider ? "Cliente" : "Prestador"}</span>
+                  <strong>{isProvider ? (data.clientName || "Cliente") : (data.providerName || "Prestador")}</strong>
+                </div>
+                <div className="metric"><span>Valor</span><strong>{price(data.agreedPrice, data.currency)}</strong></div>
+                <div className="metric"><span>Criado</span><strong>{new Date(data.createdAt).toLocaleDateString("pt-BR")}</strong></div>
+              </div>
+
+              {showMessageForm && (
+                <section className="panel">
+                  <div className="panel-head"><h2>Enviar mensagem</h2></div>
+                  <form className="form-grid" onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!messageContent.trim()) return;
+                    messageMutation.mutate(messageContent);
+                  }}>
+                    <label>Mensagem<textarea value={messageContent} onChange={(e) => setMessageContent(e.target.value)} placeholder="Digite sua mensagem..." rows={4} /></label>
+                    {messageMutation.isSuccess && <div className="ok">Mensagem enviada. Acesse o chat para continuar a conversa.</div>}
+                    {messageMutation.isError && <div className="alert">{apiError(messageMutation.error)}</div>}
+                    <div className="card-actions">
+                      <button className="btn-dark" type="submit" disabled={!messageContent.trim() || messageMutation.isPending}>
+                        <Send size={16} />Enviar
+                      </button>
+                      <button className="btn-light" type="button" onClick={() => { setShowMessageForm(false); setMessageContent(""); }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                </section>
+              )}
+
+              <section className="panel">
+                <div className="panel-head"><h2>Linha do tempo</h2></div>
+                <div className="status-timeline">
+                  {statusSteps.map((step, index) => {
+                    const Icon = step.icon;
+                    const isPast = index < currentStepIndex;
+                    const isCurrent = index === currentStepIndex;
+                    const isFuture = index > currentStepIndex;
+                    return (
+                      <div key={step.key} className={`timeline-step ${isPast ? "past" : ""} ${isCurrent ? "current" : ""} ${isFuture ? "future" : ""}`}>
+                        <div className="timeline-icon"><Icon size={18} /></div>
+                        <div className="timeline-label">{step.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {status === "confirmed" && isClient && (
+                <section className="panel">
+                  <div className="panel-head"><h2>Pagamento</h2></div>
+                  <p style={{ marginBottom: "16px", color: "var(--g600)" }}>
+                    O serviço foi concluído e confirmado. Você pode prosseguir com o pagamento.
+                  </p>
+                  <button
+                    className="btn-dark"
+                    onClick={() => paymentMutation.mutate()}
+                    disabled={paymentMutation.isPending}
+                    style={{
+                      background: "#10b981",
+                      borderColor: "#10b981",
+                      fontSize: "16px",
+                      padding: "12px 24px",
+                      minHeight: "48px"
+                    }}
+                  >
+                    <BadgeCheck size={20} />Pagar {price(data.agreedPrice, data.currency)}
+                  </button>
+                  {paymentMutation.isError && <div className="alert" style={{ marginTop: "12px" }}>{apiError(paymentMutation.error)}</div>}
+                </section>
+              )}
+
+              {(canAccept || canStart || canComplete || canConfirm || canCancel) && (
+                <section className="panel">
+                  <div className="panel-head"><h2>Ações</h2></div>
+                  <div className="card-actions">
+                    {canAccept && (
+                      <button className="btn-dark" onClick={() => acceptMutation.mutate()} disabled={acceptMutation.isPending}>
+                        <CheckCircle size={16} />Aceitar contrato
+                      </button>
+                    )}
+                    {canStart && (
+                      <button className="btn-dark" onClick={() => startMutation.mutate()} disabled={startMutation.isPending}>
+                        <Play size={16} />Iniciar trabalho
+                      </button>
+                    )}
+                    {canComplete && (
+                      <button className="btn-dark" onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}>
+                        <Flag size={16} />Marcar como concluído
+                      </button>
+                    )}
+                    {canConfirm && (
+                      <button className="btn-dark" onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}>
+                        <BadgeCheck size={16} />Confirmar conclusão
+                      </button>
+                    )}
+                    {canCancel && !showCancelForm && (
+                      <button className="btn-line danger" onClick={() => setShowCancelForm(true)}>
+                        <XCircle size={16} />Cancelar contrato
+                      </button>
+                    )}
+                  </div>
+                  {showCancelForm && (
+                    <form className="form-grid" style={{ marginTop: "16px" }} onSubmit={(e) => {
+                      e.preventDefault();
+                      cancelMutation.mutate(cancelReason);
+                    }}>
+                      <label>Motivo do cancelamento<textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Descreva o motivo do cancelamento..." /></label>
+                      <div className="card-actions">
+                        <button className="btn-dark danger" type="submit" disabled={!cancelReason.trim() || cancelMutation.isPending}>
+                          <XCircle size={16} />Confirmar cancelamento
+                        </button>
+                        <button className="btn-light" type="button" onClick={() => { setShowCancelForm(false); setCancelReason(""); }}>
+                          Voltar
+                        </button>
+                      </div>
+                      {cancelMutation.isError && <div className="alert">{apiError(cancelMutation.error)}</div>}
+                    </form>
+                  )}
+                  {acceptMutation.isError && <div className="alert">{apiError(acceptMutation.error)}</div>}
+                  {startMutation.isError && <div className="alert">{apiError(startMutation.error)}</div>}
+                  {completeMutation.isError && <div className="alert">{apiError(completeMutation.error)}</div>}
+                  {confirmMutation.isError && <div className="alert">{apiError(confirmMutation.error)}</div>}
+                </section>
+              )}
+
+          {data.listingId && (
+            <section className="panel">
+              <div className="panel-head"><h2>Anúncio relacionado</h2></div>
+              <p>{data.listingTitle ?? "Ver anúncio original"}</p>
+              <Link className="btn-light" to="/anuncios/$listingId" params={{ listingId: data.listingId }}><ArrowRight size={16} />Ver anúncio</Link>
+            </section>
+          )}
+        </div>
+      </main>
     </>
   );
 }
@@ -451,15 +951,20 @@ export function ClientDashboard() {
   const me = useQuery({ queryKey: ["me", token], queryFn: () => getMe(token ?? ""), enabled: Boolean(token) });
   const contracts = useQuery({ queryKey: ["contracts", token], queryFn: () => listContracts(token ?? ""), enabled: Boolean(token) });
   const conversations = useQuery({ queryKey: ["conversations", token], queryFn: () => listConversations(token ?? ""), enabled: Boolean(token) });
+
   if (!token) return <AuthPage mode="login" />;
-  if (me.data?.data.role === "provider") {
+  if (me.isLoading) return <DashboardShell><div className="empty">Carregando...</div></DashboardShell>;
+  if (me.isError) return <AuthPage mode="login" />;
+  if (!me.data) return <AuthPage mode="login" />;
+  if (me.data.data.role === "provider") {
     return <AccessDenied title="Dashboard exclusivo para clientes." description="Sua conta é de prestador de serviço. Use a área de ofertas e contratos recebidos." to="/dashboard/prestador" action="Ir para prestador" />;
   }
+
   return (
     <DashboardShell>
-      <header className="page-head"><div><div className="eyebrow">Cliente</div><h1 className="page-title">Olá, {me.data?.data.name ?? "cliente"}.</h1><p className="page-sub">Acompanhe propostas, contratos e mensagens em andamento.</p></div></header>
-      <div className="metrics"><div className="metric"><span>Contratos</span><strong>{contracts.data?.meta.total ?? 0}</strong></div><div className="metric"><span>Conversas</span><strong>{conversations.data?.data.length ?? 0}</strong></div><div className="metric"><span>Perfil</span><strong>{me.data?.data.role ?? "-"}</strong></div></div>
-      <section className="panel"><div className="panel-head"><h2>Contratos</h2><Link className="btn-light" to="/prestadores"><Search size={16} />Contratar serviço</Link></div><div className="grid-cards">{contracts.data?.data.map((contract) => <article className="market-card" key={contract.id}><div className="price">{contract.status}</div><h3>{contract.title}</h3><p>{contract.providerName} · {price(contract.agreedPrice, contract.currency)}</p></article>)}</div></section>
+      <header className="page-head"><div><div className="eyebrow">Cliente</div><h1 className="page-title">Olá, {me.data.data.name}.</h1><p className="page-sub">Acompanhe propostas, contratos e mensagens em andamento.</p></div></header>
+      <div className="metrics"><div className="metric"><span>Contratos</span><strong>{contracts.data?.meta.total ?? 0}</strong></div><div className="metric"><span>Conversas</span><strong>{conversations.data?.data.length ?? 0}</strong></div><div className="metric"><span>Perfil</span><strong>{me.data.data.role}</strong></div></div>
+      <section className="panel"><div className="panel-head"><h2>Contratos</h2><Link className="btn-light" to="/prestadores"><Search size={16} />Contratar serviço</Link></div><div className="grid-cards">{contracts.data?.data.map((contract) => <Link className="market-card" to="/contratos/$contractId" params={{ contractId: contract.id }} key={contract.id}><div className="price">{contract.status}</div><h3>{contract.title}</h3><p>{contract.providerName} · {price(contract.agreedPrice, contract.currency)}</p></Link>)}</div></section>
     </DashboardShell>
   );
 }
@@ -470,16 +975,21 @@ export function ProviderDashboard() {
   const contracts = useQuery({ queryKey: ["contracts", token], queryFn: () => listContracts(token ?? ""), enabled: Boolean(token) });
   const listings = useQuery({ queryKey: ["mine", token], queryFn: () => listMyListings(token ?? ""), enabled: Boolean(token) });
   const conversations = useQuery({ queryKey: ["conversations", token], queryFn: () => listConversations(token ?? ""), enabled: Boolean(token) });
+
   if (!token) return <AuthPage mode="login" />;
-  if (me.data?.data.role === "client") {
+  if (me.isLoading) return <DashboardShell><div className="empty">Carregando...</div></DashboardShell>;
+  if (me.isError) return <AuthPage mode="login" />;
+  if (!me.data) return <AuthPage mode="login" />;
+  if (me.data.data.role === "client") {
     return <AccessDenied title="Dashboard exclusivo para prestadores." description="Sua conta é de cliente. Use a área de busca e acompanhamento das suas contratações." to="/dashboard/cliente" action="Ir para cliente" />;
   }
+
   return (
     <DashboardShell>
       <header className="page-head">
         <div>
           <div className="eyebrow">Prestador</div>
-          <h1 className="page-title">Olá, {me.data?.data.name ?? "prestador"}.</h1>
+          <h1 className="page-title">Olá, {me.data.data.name}.</h1>
           <p className="page-sub">Acompanhe sua operação, contratos recebidos e acesse a área separada de ofertas quando precisar publicar ou editar anúncios.</p>
         </div>
         <Link className="btn-dark" to="/dashboard/prestador/ofertas"><BriefcaseBusiness size={16} />Gerenciar ofertas</Link>
@@ -493,11 +1003,11 @@ export function ProviderDashboard() {
         <div className="panel-head"><h2>Contratos recebidos</h2><Link className="btn-light" to="/dashboard/prestador/ofertas"><Plus size={16} />Nova oferta</Link></div>
         <div className="grid-cards">
           {contracts.data?.data.map((contract) => (
-            <article className="market-card" key={contract.id}>
+            <Link className="market-card" to="/contratos/$contractId" params={{ contractId: contract.id }} key={contract.id}>
               <div className="price">{contract.status}</div>
               <h3>{contract.title}</h3>
               <p>{contract.clientName} · {price(contract.agreedPrice, contract.currency)}</p>
-            </article>
+            </Link>
           ))}
           {contracts.data?.data.length === 0 && <div className="empty">Nenhum contrato recebido ainda.</div>}
         </div>
@@ -576,9 +1086,12 @@ export function ProviderListingsPage() {
     },
   });
   if (!token) return <AuthPage mode="login" />;
+  if (me.isLoading) return <DashboardShell><div className="empty">Carregando...</div></DashboardShell>;
+  if (me.isError) return <AuthPage mode="login" />;
   if (me.data?.data.role === "client") {
     return <AccessDenied title="Dashboard exclusivo para prestadores." description="Sua conta é de cliente. Use a área de busca e acompanhamento das suas contratações." to="/dashboard/cliente" action="Ir para cliente" />;
   }
+
   return (
     <DashboardShell>
       <header className="page-head">

@@ -4,7 +4,9 @@ import AdminDashboard from "../features/admin/AdminDashboard";
 import BaitoLandingPage from "../features/landing/BaitoLandingPage";
 import {
   AuthPage,
+  ChatWidget,
   ClientDashboard,
+  ContractDetailPage,
   ListingDetailPage,
   NotFoundPage,
   ProviderDashboard,
@@ -14,7 +16,12 @@ import {
 } from "../features/marketplace/MarketplacePages";
 
 const rootRoute = createRootRoute({
-  component: () => <Outlet />,
+  component: () => (
+    <>
+      <Outlet />
+      <ChatWidget />
+    </>
+  ),
 });
 
 const indexRoute = createRoute({
@@ -77,6 +84,12 @@ const providerListingsRoute = createRoute({
   component: ProviderListingsPage,
 });
 
+const contractDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/contratos/$contractId",
+  component: ContractDetailPage,
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "*",
@@ -90,6 +103,7 @@ export const router = createRouter({
     providersRoute,
     providerDetailRoute,
     listingDetailRoute,
+    contractDetailRoute,
     loginRoute,
     registerRoute,
     clientDashboardRoute,

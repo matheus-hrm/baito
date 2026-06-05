@@ -33,6 +33,7 @@ const tagsSchema = z.preprocess((value) => {
 const listingSchema = z.object({
   id: z.string(),
   providerId: z.string(),
+  providerUserId: z.string(),
   providerName: z.string(),
   providerRating: z.number().nullable(),
   providerReviews: z.number().nullable(),
@@ -79,10 +80,33 @@ const contractSchema = z.object({
   listingTitle: z.string().nullable(),
 });
 
+const contractDetailSchema = contractSchema.extend({
+  description: z.string().nullable(),
+  clientId: z.string(),
+  providerId: z.string(),
+  providerUserId: z.string(),
+  listingId: z.string().nullable(),
+  scheduledAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  cancelReason: z.string().nullable(),
+});
+
+const messageSchema = z.object({
+  id: z.string(),
+  senderId: z.string(),
+  receiverId: z.string(),
+  content: z.string(),
+  isRead: z.union([z.boolean(), z.number()]).transform(Boolean),
+  createdAt: z.string(),
+  contractId: z.string().nullable(),
+});
+
 export type AuthUser = z.infer<typeof userSchema>;
 export type Listing = z.infer<typeof listingSchema>;
 export type Provider = z.infer<typeof providerSchema>;
 export type Contract = z.infer<typeof contractSchema>;
+export type ContractDetail = z.infer<typeof contractDetailSchema>;
+export type Message = z.infer<typeof messageSchema>;
 
 export type ListingInput = {
   title: string;
@@ -197,4 +221,44 @@ export function listConversations(token: string) {
     z.object({ data: z.array(z.object({ userId: z.string(), userName: z.string(), lastMessageAt: z.string(), unread: z.number() })) }),
     { headers: authHeader(token) },
   );
+}
+
+export function getContract(token: string, id: string) {
+  return getJson(`/api/contracts/${id}`, z.object({ data: contractDetailSchema }), { headers: authHeader(token) });
+}
+
+export function acceptContract(token: string, id: string) {
+  return patchJson(`/api/contracts/${id}/accept`, {}, z.object({ data: contractDetailSchema }), { headers: authHeader(token) });
+}
+
+export function startContract(token: string, id: string) {
+  return patchJson(`/api/contracts/${id}/start`, {}, z.object({ data: contractDetailSchema }), { headers: authHeader(token) });
+}
+
+export function completeContract(token: string, id: string) {
+  return patchJson(`/api/contracts/${id}/complete`, {}, z.object({ data: contractDetailSchema }), { headers: authHeader(token) });
+}
+
+export function confirmContract(token: string, id: string) {
+  return patchJson(`/api/contracts/${id}/confirm`, {}, z.object({ data: contractDetailSchema }), { headers: authHeader(token) });
+}
+
+export function cancelContract(token: string, id: string, reason?: string) {
+  return patchJson(`/api/contracts/${id}/cancel`, { reason }, z.object({ data: contractDetailSchema }), { headers: authHeader(token) });
+}
+
+export function sendMessage(token: string, input: { receiverId: string; content: string; contractId?: string }) {
+  return postJson("/api/messages", input, z.object({ data: messageSchema }), { headers: authHeader(token) });
+}
+
+export function listMessages(token: string, userId: string) {
+  return getJson(`/api/messages/conversations/${userId}`, z.object({ data: z.array(messageSchema) }), { headers: authHeader(token) });
+}
+
+export function markMessagesRead(token: string, userId: string) {
+  return patchJson(`/api/messages/conversations/${userId}/read`, {}, z.object({ data: z.object({ updated: z.number() }) }), { headers: authHeader(token) });
+}
+
+export function createPaymentIntent(token: string, contractId: string) {
+  return postJson("/api/payments/payment-intent", { contractId }, z.object({ data: z.object({ clientSecret: z.string() }) }), { headers: authHeader(token) });
 }

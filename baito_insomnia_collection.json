@@ -1,0 +1,73 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-05-28T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:v8.5.0",
+  "resources": [
+    {
+      "_type": "workspace",
+      "_id": "wrk_baito",
+      "name": "Baito API",
+      "scope": "collection"
+    },
+    {
+      "_type": "environment",
+      "_id": "env_base",
+      "parentId": "wrk_baito",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:3000/api",
+        "token": "",
+        "adminToken": ""
+      }
+    },
+    
+    { "_type": "request_group", "_id": "fld_admin", "parentId": "wrk_baito", "name": "Admin" },
+    { "_type": "request", "_id": "req_adm_login", "parentId": "fld_admin", "name": "Login Admin", "method": "POST", "url": "{{ _.base_url }}/admin/login", "body": { "mimeType": "application/json", "text": "{\"email\":\"admin@baito.local\",\"password\":\"suasenha\"}" }, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_adm_me", "parentId": "fld_admin", "name": "Me Admin", "method": "GET", "url": "{{ _.base_url }}/admin/me", "authentication": {"type": "bearer", "token": "{{ _.adminToken }}"} },
+    { "_type": "request", "_id": "req_adm_ov", "parentId": "fld_admin", "name": "Overview", "method": "GET", "url": "{{ _.base_url }}/admin/overview", "authentication": {"type": "bearer", "token": "{{ _.adminToken }}"} },
+    { "_type": "request", "_id": "req_adm_ob", "parentId": "fld_admin", "name": "Observability", "method": "GET", "url": "{{ _.base_url }}/admin/observability", "authentication": {"type": "bearer", "token": "{{ _.adminToken }}"} },
+    { "_type": "request", "_id": "req_adm_us", "parentId": "fld_admin", "name": "Users", "method": "GET", "url": "{{ _.base_url }}/admin/users", "authentication": {"type": "bearer", "token": "{{ _.adminToken }}"} },
+    { "_type": "request", "_id": "req_adm_pr", "parentId": "fld_admin", "name": "Providers", "method": "GET", "url": "{{ _.base_url }}/admin/providers", "authentication": {"type": "bearer", "token": "{{ _.adminToken }}"} },
+    { "_type": "request", "_id": "req_adm_li", "parentId": "fld_admin", "name": "Listings", "method": "GET", "url": "{{ _.base_url }}/admin/listings", "authentication": {"type": "bearer", "token": "{{ _.adminToken }}"} },
+    { "_type": "request", "_id": "req_adm_co", "parentId": "fld_admin", "name": "Contracts", "method": "GET", "url": "{{ _.base_url }}/admin/contracts", "authentication": {"type": "bearer", "token": "{{ _.adminToken }}"} },
+
+    { "_type": "request_group", "_id": "fld_auth", "parentId": "wrk_baito", "name": "Auth" },
+    { "_type": "request", "_id": "req_au_reg", "parentId": "fld_auth", "name": "Register", "method": "POST", "url": "{{ _.base_url }}/auth/register", "body": { "mimeType": "application/json", "text": "{\"name\":\"João Silva\",\"email\":\"joao@exemplo.com\",\"password\":\"Senha123\",\"role\":\"client\"}" }, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_au_log", "parentId": "fld_auth", "name": "Login", "method": "POST", "url": "{{ _.base_url }}/auth/login", "body": { "mimeType": "application/json", "text": "{\"email\":\"joao@exemplo.com\",\"password\":\"Senha123\"}" }, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_au_ref", "parentId": "fld_auth", "name": "Refresh", "method": "POST", "url": "{{ _.base_url }}/auth/refresh", "body": { "mimeType": "application/json", "text": "{\"refreshToken\":\"seu_refresh_token\"}" }, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_au_lout", "parentId": "fld_auth", "name": "Logout", "method": "POST", "url": "{{ _.base_url }}/auth/logout", "body": { "mimeType": "application/json", "text": "{\"refreshToken\":\"seu_refresh_token\"}" }, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_au_lall", "parentId": "fld_auth", "name": "Logout All", "method": "POST", "url": "{{ _.base_url }}/auth/logout-all", "authentication": {"type": "bearer", "token": "{{ _.token }}"} },
+
+    { "_type": "request_group", "_id": "fld_cat", "parentId": "wrk_baito", "name": "Categories" },
+    { "_type": "request", "_id": "req_cat_list", "parentId": "fld_cat", "name": "List Categories", "method": "GET", "url": "{{ _.base_url }}/categories" },
+
+    { "_type": "request_group", "_id": "fld_usr", "parentId": "wrk_baito", "name": "Users" },
+    { "_type": "request", "_id": "req_us_me", "parentId": "fld_usr", "name": "Get Me", "method": "GET", "url": "{{ _.base_url }}/users/me", "authentication": {"type": "bearer", "token": "{{ _.token }}"} },
+    { "_type": "request", "_id": "req_us_pme", "parentId": "fld_usr", "name": "Update Me", "method": "PATCH", "url": "{{ _.base_url }}/users/me", "body": { "mimeType": "application/json", "text": "{\"name\":\"João da Silva\",\"bio\":\"Nova bio\",\"phone\":\"11999999999\"}" }, "authentication": {"type": "bearer", "token": "{{ _.token }}"}, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_us_pwd", "parentId": "fld_usr", "name": "Update Password", "method": "PATCH", "url": "{{ _.base_url }}/users/me/password", "body": { "mimeType": "application/json", "text": "{\"currentPassword\":\"Senha123\",\"newPassword\":\"NovaSenha123\"}" }, "authentication": {"type": "bearer", "token": "{{ _.token }}"}, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_us_id", "parentId": "fld_usr", "name": "Get User by ID", "method": "GET", "url": "{{ _.base_url }}/users/ID_AQUI" },
+
+    { "_type": "request_group", "_id": "fld_prov", "parentId": "wrk_baito", "name": "Providers" },
+    { "_type": "request", "_id": "req_pr_c", "parentId": "fld_prov", "name": "Create Profile", "method": "POST", "url": "{{ _.base_url }}/providers", "body": { "mimeType": "application/json", "text": "{\"displayName\":\"João Serviços\",\"description\":\"Mais de 20 anos construindo\",\"categoryId\":\"ID_CAT\"}" }, "authentication": {"type": "bearer", "token": "{{ _.token }}"}, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_pr_l", "parentId": "fld_prov", "name": "List Providers", "method": "GET", "url": "{{ _.base_url }}/providers?page=1&perPage=20&q=" },
+
+    { "_type": "request_group", "_id": "fld_list", "parentId": "wrk_baito", "name": "Listings" },
+    { "_type": "request", "_id": "req_li_c", "parentId": "fld_list", "name": "Create Listing", "method": "POST", "url": "{{ _.base_url }}/listings", "body": { "mimeType": "application/json", "text": "{\"title\":\"Manutenção de Telhado\",\"description\":\"Faço a manutenção...\",\"price\":100,\"priceType\":\"hourly\",\"tags\":[\"telhado\"]}" }, "authentication": {"type": "bearer", "token": "{{ _.token }}"}, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_li_l", "parentId": "fld_list", "name": "List Listings", "method": "GET", "url": "{{ _.base_url }}/listings?page=1&perPage=20" },
+
+    { "_type": "request_group", "_id": "fld_cont", "parentId": "wrk_baito", "name": "Contracts" },
+    { "_type": "request", "_id": "req_co_c", "parentId": "fld_cont", "name": "Create Contract/Proposal", "method": "POST", "url": "{{ _.base_url }}/contracts", "body": { "mimeType": "application/json", "text": "{\"providerId\":\"ID_PROV\",\"title\":\"Orçamento\",\"description\":\"Preciso de X e Y\"}" }, "authentication": {"type": "bearer", "token": "{{ _.token }}"}, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_co_l", "parentId": "fld_cont", "name": "List Contracts", "method": "GET", "url": "{{ _.base_url }}/contracts", "authentication": {"type": "bearer", "token": "{{ _.token }}"} },
+
+    { "_type": "request_group", "_id": "fld_msg", "parentId": "wrk_baito", "name": "Messages" },
+    { "_type": "request", "_id": "req_ms_c", "parentId": "fld_msg", "name": "Send Message", "method": "POST", "url": "{{ _.base_url }}/messages", "body": { "mimeType": "application/json", "text": "{\"receiverId\":\"ID_REC\",\"content\":\"Olá tudo bem?\"}" }, "authentication": {"type": "bearer", "token": "{{ _.token }}"}, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_ms_cv", "parentId": "fld_msg", "name": "Conversations", "method": "GET", "url": "{{ _.base_url }}/messages/conversations", "authentication": {"type": "bearer", "token": "{{ _.token }}"} },
+    { "_type": "request", "_id": "req_ms_cvi", "parentId": "fld_msg", "name": "Conversation by User ID", "method": "GET", "url": "{{ _.base_url }}/messages/conversations/USER_ID", "authentication": {"type": "bearer", "token": "{{ _.token }}"} },
+    { "_type": "request", "_id": "req_ms_r", "parentId": "fld_msg", "name": "Mark as Read", "method": "PATCH", "url": "{{ _.base_url }}/messages/conversations/USER_ID/read", "authentication": {"type": "bearer", "token": "{{ _.token }}"} },
+
+    { "_type": "request_group", "_id": "fld_rev", "parentId": "wrk_baito", "name": "Reviews" },
+    { "_type": "request", "_id": "req_rv_c", "parentId": "fld_rev", "name": "Create Review", "method": "POST", "url": "{{ _.base_url }}/reviews", "body": { "mimeType": "application/json", "text": "{\"contractId\":\"ID_CT\",\"rating\":5,\"comment\":\"Ótimo serviço\"}" }, "authentication": {"type": "bearer", "token": "{{ _.token }}"}, "headers": [{"name": "Content-Type", "value": "application/json"}] },
+    { "_type": "request", "_id": "req_rv_g", "parentId": "fld_rev", "name": "Get Provider Reviews", "method": "GET", "url": "{{ _.base_url }}/reviews/provider/PROV_ID" }
+  ]
+}

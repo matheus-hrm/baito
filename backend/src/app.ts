@@ -12,6 +12,7 @@ import { categoriesRouter } from './modules/categories/categories.router.js';
 import { contractsRouter } from './modules/contracts/contracts.router.js';
 import { listingsRouter } from './modules/listings/listings.router.js';
 import { messagesRouter } from './modules/messages/messages.router.js';
+import { paymentsRouter } from './modules/payments/payments.router.js';
 import { providersRouter } from './modules/providers/providers.router.js';
 import { reviewsRouter } from './modules/reviews/reviews.router.js';
 import { usersRouter } from './modules/users/users.router.js';
@@ -57,6 +58,7 @@ export function createApp() {
   app.use('/api/contracts', contractsRouter);
   app.use('/api/messages', messagesRouter);
   app.use('/api/reviews', reviewsRouter);
+  app.use('/api/payments', paymentsRouter);
   app.use(notFoundHandler);
   app.use(errorHandler);
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { env } from "../config/env";
+import { clearUserSession } from "../session/user-session";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -27,6 +28,12 @@ async function requestJson<T>(path: string, schema: z.ZodType<T>, init?: Request
   const payload: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 401) {
+      clearUserSession();
+      if (typeof window !== "undefined" && !window.location.pathname.includes("/entrar")) {
+        window.location.href = "/entrar";
+      }
+    }
     throw new ApiError("A API retornou uma resposta de erro.", response.status, payload);
   }
 

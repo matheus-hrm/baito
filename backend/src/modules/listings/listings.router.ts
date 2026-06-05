@@ -21,7 +21,7 @@ const listingSchema = z.object({
 function listingRow(id: string) {
   const row = sqlite
     .prepare(
-      `SELECT l.id, l.provider_id AS providerId, p.display_name AS providerName,
+      `SELECT l.id, l.provider_id AS providerId, p.user_id AS providerUserId, p.display_name AS providerName,
               p.average_rating AS providerRating, p.total_reviews AS providerReviews,
               p.location, l.category_id AS categoryId, c.name AS categoryName, c.slug AS categorySlug,
               c.icon AS categoryIcon, l.title, l.description, l.price, l.price_type AS priceType,
@@ -82,7 +82,7 @@ listingsRouter.get('/', (req, res) => {
   const clause = `WHERE ${where.join(' AND ')}`;
   const rows = sqlite
     .prepare(
-      `SELECT l.id, l.provider_id AS providerId, p.display_name AS providerName,
+      `SELECT l.id, l.provider_id AS providerId, p.user_id AS providerUserId, p.display_name AS providerName,
               p.average_rating AS providerRating, p.total_reviews AS providerReviews,
               p.location, c.name AS categoryName, c.slug AS categorySlug, c.icon AS categoryIcon,
               l.title, l.description, l.price, l.price_type AS priceType,

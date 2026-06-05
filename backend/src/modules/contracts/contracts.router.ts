@@ -28,7 +28,8 @@ function userProviderId(userId: string) {
 function contractDetail(id: string) {
   return sqlite
     .prepare(
-      `SELECT ct.id, ct.client_id AS clientId, ct.provider_id AS providerId, ct.listing_id AS listingId,
+      `SELECT ct.id, ct.client_id AS clientId, ct.provider_id AS providerId,
+              provider_user.id AS providerUserId, ct.listing_id AS listingId,
               ct.title, ct.description, ct.agreed_price AS agreedPrice, ct.currency, ct.status,
               ct.cancelled_by AS cancelledBy, ct.cancel_reason AS cancelReason,
               ct.scheduled_at AS scheduledAt, ct.completed_at AS completedAt,
