@@ -260,5 +260,5 @@ export function markMessagesRead(token: string, userId: string) {
 }
 
 export function createPaymentIntent(token: string, contractId: string) {
-  return postJson("/api/payments/payment-intent", { contractId }, z.object({ data: z.object({ clientSecret: z.string() }) }), { headers: authHeader(token) });
+  return postJson("/api/payments/payment-intent", { contractId }, z.object({ data: z.object({ url: z.string() }) }), { headers: authHeader(token) });
 }

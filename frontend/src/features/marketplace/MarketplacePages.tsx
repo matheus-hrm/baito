@@ -555,10 +555,7 @@ export function ContractDetailPage() {
   const paymentMutation = useMutation({
     mutationFn: () => createPaymentIntent(token ?? "", contractId),
     onSuccess: (response) => {
-      // In a real implementation, redirect to Stripe checkout or show payment form
-      // For now, just show success message with client secret
-      console.log("Payment intent created:", response.data.clientSecret);
-      alert("Pagamento iniciado! Em produção, você seria redirecionado para o checkout do Stripe.\n\nClient Secret (teste): " + response.data.clientSecret.substring(0, 20) + "...");
+      window.location.href = response.data.url ?? "";
     },
   });
 

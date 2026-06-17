@@ -61,33 +61,45 @@ paymentsRouter.post('/payment-intent', requireAuth, validate(createPaymentIntent
     .prepare('SELECT stripe_payment_intent_id FROM payments WHERE contract_id = ?')
     .get(contract.id) as { stripe_payment_intent_id: string } | undefined;
 
+  const frontendUrl = (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',')[0].trim();
+
   if (existing) {
-    // Return existing payment intent
-    const intent = await stripe.paymentIntents.retrieve(existing.stripe_payment_intent_id);
-    return res.json({ data: { clientSecret: intent.client_secret } });
+    if (existing.stripe_payment_intent_id.startsWith('cs_')) {
+      const session = await stripe.checkout.sessions.retrieve(existing.stripe_payment_intent_id);
+      if (session.url) return res.json({ data: { url: session.url } });
+      // Session expired — fall through and create a new one
+    }
+    // Stale or expired record (old pi_ ID or expired session) — clean up and recreate
+    sqlite.prepare('DELETE FROM payments WHERE contract_id = ?').run(contract.id);
   }
 
-  // Create new payment intent
-  const amount = Math.round(contract.agreedPrice * 100); // Convert to cents
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount,
-    currency: contract.currency.toLowerCase(),
-    automatic_payment_methods: { enabled: true },
-    metadata: {
-      contractId: contract.id,
-      contractTitle: contract.title,
-    },
+  const amount = Math.round(contract.agreedPrice * 100);
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ['card'],
+    line_items: [
+      {
+        price_data: {
+          currency: contract.currency.toLowerCase(),
+          product_data: { name: contract.title },
+          unit_amount: amount,
+        },
+        quantity: 1,
+      },
+    ],
+    mode: 'payment',
+    success_url: `${frontendUrl}/contratos/${contract.id}?payment=success`,
+    cancel_url: `${frontendUrl}/contratos/${contract.id}?payment=cancelled`,
+    metadata: { contractId: contract.id, contractTitle: contract.title },
   });
 
-  // Store payment record
   sqlite
     .prepare(
       `INSERT INTO payments (id, contract_id, stripe_payment_intent_id, amount, currency, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
     )
-    .run(crypto.randomUUID(), contract.id, paymentIntent.id, contract.agreedPrice, contract.currency, 'pending');
+    .run(crypto.randomUUID(), contract.id, session.id, contract.agreedPrice, contract.currency, 'pending');
 
-  res.json({ data: { clientSecret: paymentIntent.client_secret } });
+  res.json({ data: { url: session.url } });
 });
 
 // Webhook for Stripe events
@@ -104,16 +116,16 @@ paymentsRouter.post('/webhook', async (req, res) => {
     return res.status(400).send('Invalid signature');
   }
 
-  if (event.type === 'payment_intent.succeeded') {
-    const paymentIntent = event.data.object as Stripe.PaymentIntent;
+  if (event.type === 'checkout.session.completed') {
+    const checkoutSession = event.data.object as Stripe.Checkout.Session;
     sqlite
       .prepare('UPDATE payments SET status = ? WHERE stripe_payment_intent_id = ?')
-      .run('succeeded', paymentIntent.id);
-  } else if (event.type === 'payment_intent.payment_failed') {
-    const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      .run('succeeded', checkoutSession.id);
+  } else if (event.type === 'checkout.session.expired') {
+    const checkoutSession = event.data.object as Stripe.Checkout.Session;
     sqlite
       .prepare('UPDATE payments SET status = ? WHERE stripe_payment_intent_id = ?')
-      .run('failed', paymentIntent.id);
+      .run('failed', checkoutSession.id);
   }
 
   res.json({ received: true });
