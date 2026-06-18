@@ -9,7 +9,8 @@
     "start": "node dist/src/index.js",
     "db:migrate": "tsx src/db/migrate.ts",
     "admin:password": "tsx src/scripts/printAdminPassword.ts",
-    "test:db": "tsx tests/db.test.ts"
+    "test:db": "tsx tests/db.test.ts",
+    "test:scheduling": "tsx --test tests/scheduling.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

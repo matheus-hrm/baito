@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { listings } from './listings.js';
 import { providerProfiles } from './providers.js';
 import { users } from './users.js';
@@ -21,6 +21,11 @@ export const contracts = sqliteTable('contracts', {
   cancelledBy: text('cancelled_by'),
   cancelReason: text('cancel_reason'),
   scheduledAt: text('scheduled_at'),
+  scheduleStatus: text('schedule_status', { enum: ['unscheduled', 'scheduled', 'cancelled'] })
+    .notNull()
+    .default('unscheduled'),
+  scheduleNote: text('schedule_note'),
+  rescheduleCount: integer('reschedule_count').notNull().default(0),
   completedAt: text('completed_at'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
   updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),

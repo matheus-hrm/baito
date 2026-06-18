@@ -19,6 +19,10 @@
 body { font-family: var(--font); background: var(--bg); color: var(--fg); }
 a { color: inherit; text-decoration: none; }
 button, input, textarea, select { font: inherit; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible {
+  outline: 3px solid rgba(35, 122, 59, 0.35);
+  outline-offset: 2px;
+}
 
 .app-nav {
   position: sticky; top: 0; z-index: 50; height: 56px;
@@ -41,7 +45,7 @@ button, input, textarea, select { font: inherit; }
 .page-sub { max-width: 560px; color: var(--g500); line-height: 1.65; margin: 12px 0 0; }
 
 .btn-dark, .btn-light, .btn-line {
-  min-height: 40px; border-radius: 8px; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; border-radius: 8px; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   font-size: 13.5px; font-weight: 750; border: 1.5px solid var(--fg); cursor: pointer;
 }
 .btn-dark { background: var(--fg); color: var(--white); }
@@ -78,19 +82,20 @@ button, input, textarea, select { font: inherit; }
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
 .filters input, .form-grid input, .form-grid textarea, .form-grid select {
-  border: 1px solid var(--g200); background: var(--white); border-radius: 8px; min-height: 42px; padding: 0 12px; outline: none; color: var(--fg);
+  border: 1px solid var(--g200); background: var(--white); border-radius: 8px; min-height: 44px; padding: 0 12px; outline: none; color: var(--fg);
 }
 .filters input:focus, .form-grid input:focus, .form-grid textarea:focus, .form-grid select:focus { border-color: var(--fg); }
 .filters input { min-width: 280px; }
 .pill { border: 1.5px solid var(--g200); border-radius: 999px; background: var(--white); color: var(--g500); min-height: 36px; padding: 0 14px; font-size: 13px; font-weight: 650; }
 .pill.active { background: var(--fg); color: var(--white); border-color: var(--fg); }
 
-.auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 28px; }
-.auth-card { width: min(100%, 440px); padding: 30px; }
+.auth-wrap { min-height: 100vh; width: 100%; display: flex; align-items: center; justify-content: center; padding: 28px; overflow-x: hidden; }
+.auth-card { width: min(100%, 440px); max-width: 100%; padding: 30px; }
 .auth-card h1 { margin: 20px 0 8px; font-size: 34px; line-height: 1.06; letter-spacing: -0.035em; }
 .auth-card p { color: var(--g500); line-height: 1.6; margin: 0 0 22px; }
-.form-grid { display: grid; gap: 13px; }
+.form-grid { display: grid; gap: 13px; min-width: 0; }
 .form-grid label { display: grid; gap: 7px; color: var(--g600); font-size: 13px; font-weight: 750; }
+.form-grid .btn-dark { width: 100%; }
 .form-grid textarea { padding-top: 10px; min-height: 110px; resize: vertical; }
 .password-rules {
   display: grid;
@@ -138,7 +143,8 @@ button, input, textarea, select { font: inherit; }
 .choice-field legend { color: var(--g600); font-size: 13px; font-weight: 750; padding: 0; }
 .choice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .choice-row button {
-  min-height: 42px;
+  min-width: 0;
+  min-height: 44px;
   border: 1px solid var(--g200);
   background: var(--white);
   color: var(--g600);
@@ -146,6 +152,9 @@ button, input, textarea, select { font: inherit; }
   font-size: 13.5px;
   font-weight: 750;
   cursor: pointer;
+  white-space: normal;
+  line-height: 1.25;
+  padding: 8px 10px;
 }
 .choice-row button.active {
   background: var(--fg);
@@ -203,6 +212,15 @@ button, input, textarea, select { font: inherit; }
 .timeline-step.past .timeline-label { color: var(--fg); }
 .timeline-step.current .timeline-icon { background: var(--white); border-color: var(--fg); color: var(--fg); border-width: 3px; }
 .timeline-step.current .timeline-label { color: var(--fg); font-weight: 800; }
+/* Etapa "Confirmado" preenchida em verde quando atingida */
+.timeline-step.confirmed-done .timeline-icon { background: #237a3b; border-color: #237a3b; color: var(--white); border-width: 2px; }
+.timeline-step.confirmed-done .timeline-label { color: #237a3b; font-weight: 800; }
+
+/* Confirmação visual de pagamento aprovado pelo Stripe */
+.payment-success { display: flex; align-items: center; gap: 16px; background: #f3fbf2; border: 1px solid #d7ead5; border-radius: 12px; padding: 18px 20px; }
+.payment-success-icon { width: 48px; height: 48px; border-radius: 50%; background: #237a3b; color: var(--white); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.payment-success strong { display: block; font-size: 16px; color: #1c5226; letter-spacing: -0.01em; }
+.payment-success p { margin: 4px 0 0; color: #3d6b43; font-size: 13.5px; line-height: 1.5; }
 
 .chat-button {
   position: fixed;
@@ -373,4 +391,134 @@ button, input, textarea, select { font: inherit; }
   .app-links { display: none; }
   .page-head { display: block; }
   .metrics { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 520px) {
+  .auth-wrap {
+    align-items: flex-start;
+    min-height: 100svh;
+    padding: 18px 14px;
+  }
+  .auth-card {
+    width: 100%;
+    padding: 24px 18px;
+    border-radius: 10px;
+  }
+  .auth-card h1 {
+    font-size: 30px;
+    letter-spacing: 0;
+  }
+  .auth-card p {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .form-grid input,
+  .form-grid textarea,
+  .form-grid select {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .choice-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .password-rules,
+  .password-rule,
+  .rule-icon,
+  .field-popover {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ===== Agendamento de serviços ===== */
+.schedule-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border: 1.5px solid var(--g200);
+  background: var(--g50);
+  color: var(--g600);
+  white-space: nowrap;
+}
+.schedule-date .schedule-rel { font-style: normal; font-weight: 600; opacity: 0.8; }
+.schedule-date.soon {
+  border-color: #f59e0b;
+  background: #fef3c7;
+  color: #92400e;
+}
+.schedule-date.urgent {
+  border-color: #ef4444;
+  background: #fee2e2;
+  color: #b91c1c;
+  animation: schedulePulse 1.8s ease-in-out infinite;
+}
+@keyframes schedulePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18); }
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(10, 10, 10, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: modalFadeIn 0.18s ease;
+}
+@keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal-card {
+  width: min(100%, 460px);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--white);
+  border: 1px solid var(--g200);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  animation: modalCardIn 0.22s ease;
+}
+@keyframes modalCardIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.modal-head h2 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
+
+.schedule-summary {
+  background: var(--g50);
+  border: 1px solid var(--g100);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.schedule-summary .eyebrow { color: var(--g500); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: 0.06em; }
+.schedule-summary strong { display: block; margin: 6px 0 12px; font-size: 16px; }
+.schedule-summary ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.schedule-summary li { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.schedule-summary li span { color: var(--g500); }
+.schedule-summary li b { color: var(--fg); text-align: right; }
+
+@media (prefers-reduced-motion: reduce) {
+  .schedule-date.urgent,
+  .modal-overlay,
+  .modal-card {
+    animation: none;
+  }
 }

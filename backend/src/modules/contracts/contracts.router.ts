@@ -7,8 +7,25 @@ import { getAuthUser, requireAuth, requireRole } from '../../middleware/auth.js'
 import { validate } from '../../middleware/validate.js';
 import { AppError } from '../../utils/errors.js';
 import { parsePagination } from '../../utils/pagination.js';
+import {
+  assertCanCancelSchedule,
+  assertCanReschedule,
+  assertCanSchedule,
+  assertFutureDate,
+  parseScheduleDate,
+  type ScheduleStatus,
+} from './scheduling.js';
 
 export const contractsRouter = Router();
+
+const scheduleSchema = z.object({
+  scheduledAt: z.string().min(1),
+  note: z.string().max(500).trim().nullable().optional(),
+});
+
+const cancelScheduleSchema = z.object({
+  reason: z.string().max(500).trim().nullable().optional(),
+});
 
 const createContractSchema = z.object({
   providerId: z.string().min(1),
@@ -32,7 +49,9 @@ function contractDetail(id: string) {
               provider_user.id AS providerUserId, ct.listing_id AS listingId,
               ct.title, ct.description, ct.agreed_price AS agreedPrice, ct.currency, ct.status,
               ct.cancelled_by AS cancelledBy, ct.cancel_reason AS cancelReason,
-              ct.scheduled_at AS scheduledAt, ct.completed_at AS completedAt,
+              ct.scheduled_at AS scheduledAt, ct.schedule_status AS scheduleStatus,
+              ct.schedule_note AS scheduleNote, ct.reschedule_count AS rescheduleCount,
+              ct.completed_at AS completedAt,
               ct.created_at AS createdAt, ct.updated_at AS updatedAt,
               client.name AS clientName, client.email AS clientEmail,
               p.display_name AS providerName, provider_user.email AS providerEmail,
@@ -94,6 +113,8 @@ contractsRouter.get('/', requireAuth, (req, res) => {
   const data = sqlite
     .prepare(
       `SELECT ct.id, ct.title, ct.status, ct.agreed_price AS agreedPrice, ct.currency,
+              ct.scheduled_at AS scheduledAt, ct.schedule_status AS scheduleStatus,
+              ct.reschedule_count AS rescheduleCount,
               ct.created_at AS createdAt, client.name AS clientName, p.display_name AS providerName,
               l.title AS listingTitle
        FROM contracts ct
@@ -157,5 +178,69 @@ contractsRouter.patch('/:id/cancel', requireAuth, validate(cancelSchema), (req, 
   sqlite
     .prepare("UPDATE contracts SET status = 'cancelled', cancelled_by = ?, cancel_reason = ? WHERE id = ?")
     .run(user.id, req.body.reason, contract.id);
+  res.json({ data: contractDetail(contract.id) });
+});
+
+type ScheduleRow = {
+  id: string;
+  clientId: string;
+  providerId: string;
+  status: string;
+  scheduleStatus: ScheduleStatus;
+};
+
+function loadSchedulableContract(req: Request, userId: string): ScheduleRow {
+  const contract = contractDetail(req.params.id) as ScheduleRow | undefined;
+  if (!contract) throw new AppError('Contrato não encontrado', 404);
+  assertParty(contract, userId);
+  return contract;
+}
+
+// Agendar serviço
+contractsRouter.patch('/:id/schedule', requireAuth, validate(scheduleSchema), (req, res) => {
+  const user = getAuthUser(req);
+  const contract = loadSchedulableContract(req, user.id);
+  assertCanSchedule(contract.status, contract.scheduleStatus);
+
+  const date = parseScheduleDate(req.body.scheduledAt);
+  assertFutureDate(date);
+
+  sqlite
+    .prepare(
+      "UPDATE contracts SET scheduled_at = ?, schedule_status = 'scheduled', schedule_note = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .run(date.toISOString(), req.body.note ?? null, contract.id);
+  res.json({ data: contractDetail(contract.id) });
+});
+
+// Reagendar serviço
+contractsRouter.patch('/:id/reschedule', requireAuth, validate(scheduleSchema), (req, res) => {
+  const user = getAuthUser(req);
+  const contract = loadSchedulableContract(req, user.id);
+  assertCanReschedule(contract.status, contract.scheduleStatus);
+
+  const date = parseScheduleDate(req.body.scheduledAt);
+  assertFutureDate(date);
+
+  sqlite
+    .prepare(
+      "UPDATE contracts SET scheduled_at = ?, schedule_note = COALESCE(?, schedule_note), reschedule_count = reschedule_count + 1, updated_at = datetime('now') WHERE id = ?",
+    )
+    .run(date.toISOString(), req.body.note ?? null, contract.id);
+  res.json({ data: contractDetail(contract.id) });
+});
+
+// Cancelar agendamento (sem cancelar o contrato)
+contractsRouter.patch('/:id/cancel-schedule', requireAuth, validate(cancelScheduleSchema), (req, res) => {
+  const user = getAuthUser(req);
+  const contract = loadSchedulableContract(req, user.id);
+  assertCanCancelSchedule(contract.scheduleStatus);
+
+  const note = req.body.reason ? `Agendamento cancelado: ${req.body.reason}` : null;
+  sqlite
+    .prepare(
+      "UPDATE contracts SET scheduled_at = NULL, schedule_status = 'cancelled', schedule_note = ?, updated_at = datetime('now') WHERE id = ?",
+    )
+    .run(note, contract.id);
   res.json({ data: contractDetail(contract.id) });
 });

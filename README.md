@@ -44,7 +44,11 @@ JWT_SECRET=...
 JWT_REFRESH_SECRET=...
 ADMIN_EMAIL=admin@baito.local
 ADMIN_PASSWORD_DERIVE_SECRET=...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 ```
+
+`STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` sao necessarias para o fluxo de pagamentos. Sem `STRIPE_SECRET_KEY` a API sobe, mas os endpoints de pagamento retornam erro 500. Veja a secao [Pagamentos (Stripe)](#pagamentos-stripe).
 
 Para imprimir a senha admin derivada localmente:
 
@@ -90,6 +94,55 @@ cd frontend
 npm run build
 npm run lint
 ```
+
+## Pagamentos (Stripe)
+
+O pagamento de um contrato usa o **Stripe Checkout** (modo hospedado). Fluxo:
+
+1. As partes negociam ate o contrato ficar com status `confirmed` e um `agreed_price` definido.
+2. O cliente clica em pagar; o frontend chama `POST /api/payments/payment-intent`.
+3. A API cria uma Checkout Session no Stripe e devolve a `url` de pagamento; o navegador e redirecionado para o Stripe.
+4. Apos pagar, o Stripe redireciona de volta para `/contratos/:id?payment=success` (ou `?payment=cancelled`).
+5. O Stripe envia o evento para `POST /api/payments/webhook`, que atualiza o status do pagamento no banco.
+
+### Variaveis de ambiente
+
+```env
+STRIPE_SECRET_KEY=sk_test_...     # chave secreta da conta (use a de teste)
+STRIPE_WEBHOOK_SECRET=whsec_...   # segredo de assinatura do webhook
+```
+
+Pegue as chaves no painel do Stripe em **Developers > API keys**. Use sempre as chaves de **teste** (`sk_test_...`) em desenvolvimento.
+
+### Endpoints
+
+| Metodo | Rota | Auth | Descricao |
+| --- | --- | --- | --- |
+| POST | `/api/payments/payment-intent` | Bearer (cliente ou prestador do contrato) | Cria/recupera a Checkout Session e retorna `{ data: { url } }`. Exige contrato `confirmed` com valor > 0. |
+| POST | `/api/payments/webhook` | Assinatura Stripe | Recebe eventos. Trata `checkout.session.completed` (status `succeeded`) e `checkout.session.expired` (status `failed`). |
+
+Exemplo de requisicao:
+
+```bash
+curl -X POST http://localhost:3000/api/payments/payment-intent \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{ "contractId": "<ID_DO_CONTRATO>" }'
+# => { "data": { "url": "https://checkout.stripe.com/c/pay/cs_test_..." } }
+```
+
+### Testar o webhook localmente
+
+O webhook precisa de uma assinatura valida; use a [Stripe CLI](https://docs.stripe.com/stripe-cli) para encaminhar os eventos:
+
+```bash
+stripe login
+stripe listen --forward-to localhost:3000/api/payments/webhook
+```
+
+O `stripe listen` imprime um `whsec_...` — copie para `STRIPE_WEBHOOK_SECRET` e reinicie o backend.
+
+Cartao de teste para o Checkout: `4242 4242 4242 4242`, qualquer data futura e qualquer CVC.
 
 ## Estrutura
 

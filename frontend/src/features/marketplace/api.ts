@@ -68,12 +68,17 @@ const providerSchema = z.object({
   categoryIcon: z.string().nullable(),
 });
 
+const scheduleStatusSchema = z.enum(["unscheduled", "scheduled", "cancelled"]);
+
 const contractSchema = z.object({
   id: z.string(),
   title: z.string(),
   status: z.string(),
   agreedPrice: z.number().nullable(),
   currency: z.string(),
+  scheduledAt: z.string().nullable().optional(),
+  scheduleStatus: scheduleStatusSchema.optional(),
+  rescheduleCount: z.number().optional(),
   createdAt: z.string(),
   clientName: z.string(),
   providerName: z.string(),
@@ -87,6 +92,9 @@ const contractDetailSchema = contractSchema.extend({
   providerUserId: z.string(),
   listingId: z.string().nullable(),
   scheduledAt: z.string().nullable(),
+  scheduleStatus: scheduleStatusSchema,
+  scheduleNote: z.string().nullable(),
+  rescheduleCount: z.number(),
   completedAt: z.string().nullable(),
   cancelReason: z.string().nullable(),
 });
@@ -257,6 +265,18 @@ export function listMessages(token: string, userId: string) {
 
 export function markMessagesRead(token: string, userId: string) {
   return patchJson(`/api/messages/conversations/${userId}/read`, {}, z.object({ data: z.object({ updated: z.number() }) }), { headers: authHeader(token) });
+}
+
+export function scheduleService(token: string, id: string, input: { scheduledAt: string; note?: string | null }) {
+  return patchJson(`/api/contracts/${id}/schedule`, input, z.object({ data: contractDetailSchema }), { headers: authHeader(token) });
+}
+
+export function rescheduleService(token: string, id: string, input: { scheduledAt: string; note?: string | null }) {
+  return patchJson(`/api/contracts/${id}/reschedule`, input, z.object({ data: contractDetailSchema }), { headers: authHeader(token) });
+}
+
+export function cancelSchedule(token: string, id: string, reason?: string | null) {
+  return patchJson(`/api/contracts/${id}/cancel-schedule`, { reason }, z.object({ data: contractDetailSchema }), { headers: authHeader(token) });
 }
 
 export function createPaymentIntent(token: string, contractId: string) {

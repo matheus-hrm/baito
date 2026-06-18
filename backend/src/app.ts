@@ -33,6 +33,8 @@ export function createApp() {
 
   app.use(helmet());
   app.use(cors({ origin: corsOrigins, credentials: true }));
+  // O webhook do Stripe exige o corpo raw para validar a assinatura; precisa vir antes do express.json().
+  app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
   app.use(express.json({ limit: '10kb' }));
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
   app.use(apiLimiter);

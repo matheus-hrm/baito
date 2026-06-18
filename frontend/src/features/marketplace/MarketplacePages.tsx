@@ -5,6 +5,8 @@ import {
   ArrowRight,
   BadgeCheck,
   BriefcaseBusiness,
+  CalendarClock,
+  CalendarPlus,
   Check,
   CheckCircle,
   Clock,
@@ -14,6 +16,7 @@ import {
   MapPin,
   Play,
   Plus,
+  RotateCcw,
   Search,
   Send,
   Shield,
@@ -52,12 +55,17 @@ import {
   loginUser,
   markMessagesRead,
   registerUser,
+  cancelSchedule,
+  rescheduleService,
+  scheduleService,
   sendMessage,
   startContract,
   updateListing,
+  type ContractDetail,
   type Listing,
   type ListingInput,
 } from "./api";
+import { formatScheduleDate, scheduleProximity, scheduleRelativeLabel, toDateTimeLocalValue } from "./schedule";
 import "./marketplace.css";
 
 function price(value: number | null, currency = "BRL") {
@@ -85,6 +93,135 @@ function apiError(error: unknown) {
     return String(error.payload.error);
   }
   return error instanceof Error ? error.message : "Não foi possível completar a operação.";
+}
+
+/**
+ * Chip de data agendada. Fica vermelho (`urgent`) quando faltam <= 3 dias da data alvo,
+ * âmbar (`soon`) quando faltam <= 7. Reutilizado em cards, dashboards e no detalhe.
+ */
+function ScheduleBadge({
+  scheduledAt,
+  scheduleStatus,
+  withRelative = false,
+}: {
+  scheduledAt?: string | null | undefined;
+  scheduleStatus?: "unscheduled" | "scheduled" | "cancelled" | undefined;
+  withRelative?: boolean;
+}) {
+  if (!scheduledAt || scheduleStatus === "cancelled") return null;
+  const proximity = scheduleProximity(scheduledAt);
+  const relative = scheduleRelativeLabel(scheduledAt);
+  return (
+    <span className={`schedule-date ${proximity}`} title={`Agendado para ${formatScheduleDate(scheduledAt)}`}>
+      <CalendarClock size={14} />
+      {formatScheduleDate(scheduledAt)}
+      {withRelative && relative && <em className="schedule-rel">· {relative}</em>}
+    </span>
+  );
+}
+
+/** Modal de agendamento/reagendamento com resumo do serviço. */
+function ScheduleModal({
+  contract,
+  mode,
+  onClose,
+  onSubmit,
+  isPending,
+  error,
+}: {
+  contract: ContractDetail;
+  mode: "create" | "edit";
+  onClose: () => void;
+  onSubmit: (input: { scheduledAt: string; note?: string | null }) => void;
+  isPending: boolean;
+  error?: unknown;
+}) {
+  const [value, setValue] = useState(() => (mode === "edit" ? toDateTimeLocalValue(contract.scheduledAt) : ""));
+  const [note, setNote] = useState(() => (mode === "edit" ? contract.scheduleNote ?? "" : ""));
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  // Padrões de modal em JS: fecha com Esc e trava o scroll do body enquanto aberto.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose]);
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    setLocalError(null);
+    if (!value) {
+      setLocalError("Escolha uma data e horário.");
+      return;
+    }
+    const chosen = new Date(value);
+    if (Number.isNaN(chosen.getTime())) {
+      setLocalError("Data inválida.");
+      return;
+    }
+    if (chosen.getTime() <= Date.now()) {
+      setLocalError("A data deve estar no futuro.");
+      return;
+    }
+    onSubmit({ scheduledAt: chosen.toISOString(), note: note.trim() ? note.trim() : null });
+  };
+
+  const otherParty = contract.providerName || contract.clientName;
+
+  return (
+    <div className="modal-overlay" role="presentation" onClick={onClose}>
+      <div className="modal-card" role="dialog" aria-modal="true" aria-label="Agendar serviço" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <h2>{mode === "edit" ? "Reagendar serviço" : "Agendar serviço"}</h2>
+          <button type="button" className="chat-header-btn" aria-label="Fechar" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="schedule-summary">
+          <div className="eyebrow">Resumo do serviço</div>
+          <strong>{contract.title}</strong>
+          <ul>
+            <li><span>Com</span><b>{otherParty}</b></li>
+            <li><span>Valor</span><b>{price(contract.agreedPrice, contract.currency)}</b></li>
+            <li><span>Status</span><b>{contract.status}</b></li>
+            {mode === "edit" && contract.scheduledAt && (
+              <li><span>Atual</span><b>{formatScheduleDate(contract.scheduledAt)}</b></li>
+            )}
+            {contract.rescheduleCount > 0 && (
+              <li><span>Reagendado</span><b>{contract.rescheduleCount}x</b></li>
+            )}
+          </ul>
+        </div>
+
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>
+            Data e horário
+            <input type="datetime-local" value={value} onChange={(event) => setValue(event.target.value)} required />
+          </label>
+          <label>
+            Observação (opcional)
+            <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Endereço, instruções, ponto de referência..." rows={3} maxLength={500} />
+          </label>
+          {localError && <div className="alert">{localError}</div>}
+          {error != null && <div className="alert">{apiError(error)}</div>}
+          <div className="card-actions">
+            <button className="btn-dark" type="submit" disabled={isPending}>
+              <CalendarClock size={16} />{mode === "edit" ? "Salvar novo horário" : "Confirmar agendamento"}
+            </button>
+            <button className="btn-light" type="button" onClick={onClose}>Cancelar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 function tagsFromText(value: FormDataEntryValue | null) {
@@ -535,6 +672,7 @@ export function ContractDetailPage() {
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [showMessageForm, setShowMessageForm] = useState(false);
   const [messageContent, setMessageContent] = useState("");
+  const [scheduleModalMode, setScheduleModalMode] = useState<"create" | "edit" | null>(null);
 
   const me = useQuery({ queryKey: ["me", token], queryFn: () => getMe(token ?? ""), enabled: Boolean(token) });
   const contract = useQuery({ queryKey: ["contract", contractId], queryFn: () => getContract(token ?? "", contractId), enabled: Boolean(token) });
@@ -601,6 +739,39 @@ export function ContractDetailPage() {
     },
   });
 
+  const invalidateContract = () => {
+    void queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
+    void queryClient.invalidateQueries({ queryKey: ["contracts"] });
+  };
+
+  const scheduleMutation = useMutation({
+    mutationFn: (input: { scheduledAt: string; note?: string | null }) => scheduleService(token ?? "", contractId, input),
+    onSuccess: () => { setScheduleModalMode(null); invalidateContract(); },
+  });
+
+  const rescheduleMutation = useMutation({
+    mutationFn: (input: { scheduledAt: string; note?: string | null }) => rescheduleService(token ?? "", contractId, input),
+    onSuccess: () => { setScheduleModalMode(null); invalidateContract(); },
+  });
+
+  const cancelScheduleMutation = useMutation({
+    mutationFn: () => cancelSchedule(token ?? "", contractId),
+    onSuccess: invalidateContract,
+  });
+
+  // Pagamento: o Stripe redireciona para ?payment=success após o checkout.
+  // Persistimos em localStorage para o estado sobreviver a recarregamentos/navegação.
+  const paymentParam = new URLSearchParams(window.location.search).get("payment");
+  const paidStorageKey = `baito:contract-paid:${contractId}`;
+  const [isPaid] = useState(
+    () => paymentParam === "success" || localStorage.getItem(paidStorageKey) === "1",
+  );
+  useEffect(() => {
+    if (paymentParam === "success") {
+      localStorage.setItem(paidStorageKey, "1");
+    }
+  }, [paymentParam, paidStorageKey]);
+
   if (!token) return <AuthPage mode="login" />;
   if (me.isLoading || contract.isLoading) {
     return (
@@ -627,6 +798,11 @@ export function ContractDetailPage() {
   const canComplete = isProvider && status === "in_progress";
   const canConfirm = isClient && status === "completed";
   const canCancel = (isClient || isProvider) && ["pending", "accepted", "in_progress"].includes(status);
+  const isParty = isClient || isProvider;
+  const isActive = ["pending", "accepted", "in_progress"].includes(status);
+  const hasSchedule = data.scheduleStatus === "scheduled" && Boolean(data.scheduledAt);
+  const canSchedule = isParty && isActive && !hasSchedule;
+  const scheduleBusy = scheduleMutation.isPending || rescheduleMutation.isPending || cancelScheduleMutation.isPending;
 
   const statusSteps = [
     { key: "pending", label: "Pendente", icon: Clock, active: status === "pending" },
@@ -666,6 +842,45 @@ export function ContractDetailPage() {
                 <div className="metric"><span>Criado</span><strong>{new Date(data.createdAt).toLocaleDateString("pt-BR")}</strong></div>
               </div>
 
+              {isParty && (status !== "cancelled" && status !== "confirmed") && (
+                <section className="panel">
+                  <div className="panel-head">
+                    <h2>Agendamento</h2>
+                    {hasSchedule && <ScheduleBadge scheduledAt={data.scheduledAt} scheduleStatus={data.scheduleStatus} withRelative />}
+                  </div>
+                  {hasSchedule ? (
+                    <>
+                      <p style={{ color: "var(--g600)", margin: "0 0 16px" }}>
+                        Serviço agendado para <strong>{formatScheduleDate(data.scheduledAt)}</strong>
+                        {data.rescheduleCount > 0 && <> · reagendado {data.rescheduleCount}x</>}.
+                        {data.scheduleNote && <><br />Observação: {data.scheduleNote}</>}
+                      </p>
+                      <div className="card-actions">
+                        <button className="btn-light" type="button" disabled={scheduleBusy || !isActive} onClick={() => setScheduleModalMode("edit")}>
+                          <RotateCcw size={16} />Reagendar
+                        </button>
+                        <button className="btn-line danger" type="button" disabled={scheduleBusy} onClick={() => cancelScheduleMutation.mutate()}>
+                          <XCircle size={16} />Cancelar agendamento
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ color: "var(--g600)", margin: "0 0 16px" }}>
+                        {data.scheduleStatus === "cancelled" ? "O agendamento anterior foi cancelado. " : ""}
+                        Nenhuma data definida. Combine o melhor horário para a realização do serviço.
+                      </p>
+                      <div className="card-actions">
+                        <button className="btn-dark" type="button" disabled={!canSchedule || scheduleBusy} onClick={() => setScheduleModalMode("create")}>
+                          <CalendarPlus size={16} />Agendar serviço
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {cancelScheduleMutation.isError && <div className="alert" style={{ marginTop: 12 }}>{apiError(cancelScheduleMutation.error)}</div>}
+                </section>
+              )}
+
               {showMessageForm && (
                 <section className="panel">
                   <div className="panel-head"><h2>Enviar mensagem</h2></div>
@@ -697,8 +912,9 @@ export function ContractDetailPage() {
                     const isPast = index < currentStepIndex;
                     const isCurrent = index === currentStepIndex;
                     const isFuture = index > currentStepIndex;
+                    const isConfirmedDone = step.key === "confirmed" && currentStepIndex >= index;
                     return (
-                      <div key={step.key} className={`timeline-step ${isPast ? "past" : ""} ${isCurrent ? "current" : ""} ${isFuture ? "future" : ""}`}>
+                      <div key={step.key} className={`timeline-step ${isPast ? "past" : ""} ${isCurrent ? "current" : ""} ${isFuture ? "future" : ""} ${isConfirmedDone ? "confirmed-done" : ""}`}>
                         <div className="timeline-icon"><Icon size={18} /></div>
                         <div className="timeline-label">{step.label}</div>
                       </div>
@@ -710,24 +926,36 @@ export function ContractDetailPage() {
               {status === "confirmed" && isClient && (
                 <section className="panel">
                   <div className="panel-head"><h2>Pagamento</h2></div>
-                  <p style={{ marginBottom: "16px", color: "var(--g600)" }}>
-                    O serviço foi concluído e confirmado. Você pode prosseguir com o pagamento.
-                  </p>
-                  <button
-                    className="btn-dark"
-                    onClick={() => paymentMutation.mutate()}
-                    disabled={paymentMutation.isPending}
-                    style={{
-                      background: "#10b981",
-                      borderColor: "#10b981",
-                      fontSize: "16px",
-                      padding: "12px 24px",
-                      minHeight: "48px"
-                    }}
-                  >
-                    <BadgeCheck size={20} />Pagar {price(data.agreedPrice, data.currency)}
-                  </button>
-                  {paymentMutation.isError && <div className="alert" style={{ marginTop: "12px" }}>{apiError(paymentMutation.error)}</div>}
+                  {isPaid ? (
+                    <div className="payment-success">
+                      <div className="payment-success-icon"><CheckCircle size={28} /></div>
+                      <div>
+                        <strong>Pagamento confirmado</strong>
+                        <p>O pagamento de {price(data.agreedPrice, data.currency)} foi processado com sucesso pelo Stripe.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p style={{ marginBottom: "16px", color: "var(--g600)" }}>
+                        O serviço foi concluído e confirmado. Você pode prosseguir com o pagamento.
+                      </p>
+                      <button
+                        className="btn-dark"
+                        onClick={() => paymentMutation.mutate()}
+                        disabled={paymentMutation.isPending}
+                        style={{
+                          background: "#10b981",
+                          borderColor: "#10b981",
+                          fontSize: "16px",
+                          padding: "12px 24px",
+                          minHeight: "48px"
+                        }}
+                      >
+                        <BadgeCheck size={20} />Pagar {price(data.agreedPrice, data.currency)}
+                      </button>
+                      {paymentMutation.isError && <div className="alert" style={{ marginTop: "12px" }}>{apiError(paymentMutation.error)}</div>}
+                    </>
+                  )}
                 </section>
               )}
 
@@ -794,6 +1022,16 @@ export function ContractDetailPage() {
           )}
         </div>
       </main>
+      {scheduleModalMode && (
+        <ScheduleModal
+          contract={data}
+          mode={scheduleModalMode}
+          onClose={() => setScheduleModalMode(null)}
+          onSubmit={(input) => (scheduleModalMode === "edit" ? rescheduleMutation : scheduleMutation).mutate(input)}
+          isPending={scheduleMutation.isPending || rescheduleMutation.isPending}
+          error={scheduleModalMode === "edit" ? rescheduleMutation.error : scheduleMutation.error}
+        />
+      )}
     </>
   );
 }
@@ -897,10 +1135,10 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
             <fieldset className="choice-field">
               <legend>Sou um:</legend>
               <div className="choice-row">
-                <button type="button" className={role === "client" ? "active" : ""} onClick={() => setRole("client")}>
+                <button type="button" className={role === "client" ? "active" : ""} aria-pressed={role === "client"} onClick={() => setRole("client")}>
                   Cliente
                 </button>
-                <button type="button" className={role === "provider" ? "active" : ""} onClick={() => setRole("provider")}>
+                <button type="button" className={role === "provider" ? "active" : ""} aria-pressed={role === "provider"} onClick={() => setRole("provider")}>
                   Prestador de serviço
                 </button>
               </div>
@@ -961,7 +1199,7 @@ export function ClientDashboard() {
     <DashboardShell>
       <header className="page-head"><div><div className="eyebrow">Cliente</div><h1 className="page-title">Olá, {me.data.data.name}.</h1><p className="page-sub">Acompanhe propostas, contratos e mensagens em andamento.</p></div></header>
       <div className="metrics"><div className="metric"><span>Contratos</span><strong>{contracts.data?.meta.total ?? 0}</strong></div><div className="metric"><span>Conversas</span><strong>{conversations.data?.data.length ?? 0}</strong></div><div className="metric"><span>Perfil</span><strong>{me.data.data.role}</strong></div></div>
-      <section className="panel"><div className="panel-head"><h2>Contratos</h2><Link className="btn-light" to="/prestadores"><Search size={16} />Contratar serviço</Link></div><div className="grid-cards">{contracts.data?.data.map((contract) => <Link className="market-card" to="/contratos/$contractId" params={{ contractId: contract.id }} key={contract.id}><div className="price">{contract.status}</div><h3>{contract.title}</h3><p>{contract.providerName} · {price(contract.agreedPrice, contract.currency)}</p></Link>)}</div></section>
+      <section className="panel"><div className="panel-head"><h2>Contratos</h2><Link className="btn-light" to="/prestadores"><Search size={16} />Contratar serviço</Link></div><div className="grid-cards">{contracts.data?.data.map((contract) => <Link className="market-card" to="/contratos/$contractId" params={{ contractId: contract.id }} key={contract.id}><div className="price">{contract.status}</div><h3>{contract.title}</h3><p>{contract.providerName} · {price(contract.agreedPrice, contract.currency)}</p><ScheduleBadge scheduledAt={contract.scheduledAt} scheduleStatus={contract.scheduleStatus} withRelative /></Link>)}</div></section>
     </DashboardShell>
   );
 }
@@ -1004,6 +1242,7 @@ export function ProviderDashboard() {
               <div className="price">{contract.status}</div>
               <h3>{contract.title}</h3>
               <p>{contract.clientName} · {price(contract.agreedPrice, contract.currency)}</p>
+              <ScheduleBadge scheduledAt={contract.scheduledAt} scheduleStatus={contract.scheduleStatus} withRelative />
             </Link>
           ))}
           {contracts.data?.data.length === 0 && <div className="empty">Nenhum contrato recebido ainda.</div>}
